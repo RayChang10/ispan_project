@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+
+{% block title %}履歷建立 - 虛擬面試顧問{% endblock %}
+
+{% block head %}
+<style>
+    .section-header {
+        background: linear-gradient(45deg, #007bff, #0056b3);
+        color: white;
+        border-radius: 8px;
+        margin-bottom: 20px;
+    }
+    .experience-card {
+        border: 2px solid #e9ecef;
+        border-radius: 10px;
+        margin-bottom: 20px;
+        transition: all 0.3s ease;
+    }
+    .experience-card:hover {
+        border-color: #007bff;
+        box-shadow: 0 4px 12px rgba(0,123,255,0.15);
+    }
+    .add-button {
+        border: 2px dashed #007bff;
+        color: #007bff;
+        background: #f8f9fa;
+        transition: all 0.3s ease;
+    }
+    .add-button:hover {
+        background: #007bff;
+        color: white;
+        border-color: #007bff;
+    }
+    .delete-btn {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+    <div class="row justify-content-center">
+        <div class="col-lg-10">
+            <form id="resumeForm">
+                <!-- 基本資料區 -->
+                <div class="section-header p-3 mb-4">
+                    <h3 class="mb-0"><i class="fas fa-user me-2"></i>基本資料</h3>
+                </div>
+                
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <label for="name" class="form-label">姓名 <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="name" name="name" required>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="desired_position" class="form-label">期望職稱 <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="desired_position" name="desired_position" required>
+                    </div>
+                </div>
+                
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <label for="desired_field" class="form-label">期望工作領域 <span class="text-danger">*</span></label>
+                        <select class="form-select" id="desired_field" name="desired_field" required>
+                            <option value="">請選擇工作領域</option>
+                            <option value="資訊科技">資訊科技</option>
+                            <option value="金融服務">金融服務</option>
+                            <option value="製造業">製造業</option>
+                            <option value="醫療保健">醫療保健</option>
+                            <option value="教育">教育</option>
+                            <option value="零售業">零售業</option>
+                            <option value="房地產">房地產</option>
+                            <option value="媒體廣告">媒體廣告</option>
+                            <option value="餐飲服務">餐飲服務</option>
+                            <option value="交通運輸">交通運輸</option>
+                            <option value="政府公職">政府公職</option>
+                            <option value="非營利組織">非營利組織</option>
+                            <option value="其他">其他</option>
+                        </select>
+                    </div>
+                    <div class="col-md-6">
+                        <label for="desired_location" class="form-label">期望工作地點 <span class="text-danger">*</span></label>
+                        <select class="form-select" id="desired_location" name="desired_location" required>
+                            <option value="">請選擇工作地點</option>
+                            <option value="台北市">台北市</option>
+                            <option value="新北市">新北市</option>
+                            <option value="桃園市">桃園市</option>
+                            <option value="台中市">台中市</option>
+                            <option value="台南市">台南市</option>
+                            <option value="高雄市">高雄市</option>
+                            <option value="新竹縣市">新竹縣市</option>
+                            <option value="彰化縣">彰化縣</option>
+                            <option value="雲林縣">雲林縣</option>
+                            <option value="嘉義縣市">嘉義縣市</option>
+                            <option value="屏東縣">屏東縣</option>
+                            <option value="宜蘭縣">宜蘭縣</option>
+                            <option value="花蓮縣">花蓮縣</option>
+                            <option value="台東縣">台東縣</option>
+                            <option value="澎湖縣">澎湖縣</option>
+                            <option value="金門縣">金門縣</option>
+                            <option value="連江縣">連江縣</option>
+                            <option value="海外">海外</option>
+                            <option value="不限地點">不限地點</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="mb-4">
+                    <label for="introduction" class="form-label">個人簡介</label>
+                    <textarea class="form-control" id="introduction" name="introduction" rows="4" 
+                              placeholder="請簡單介紹您的背景、專長和職涯目標..."></textarea>
+                </div>
+                
+                <!-- 關鍵字區 -->
+                <div class="mb-4">
+                    <label class="form-label">專業關鍵字</label>
+                    <div id="keywordsContainer">
+                        <div class="d-flex align-items-center mb-2">
+                            <input type="text" class="form-control me-2" name="keywords[]" placeholder="例如：Python, 資料分析, 專案管理...">
+                            <button type="button" class="btn btn-success btn-sm" onclick="addKeyword()">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- 技能區 -->
+                <div class="section-header p-3 mb-4">
+                    <h3 class="mb-0"><i class="fas fa-cogs me-2"></i>專業技能</h3>
+                </div>
+                
+                <div id="skillsContainer">
+                    <!-- 技能會動態增加 -->
+                </div>
+                
+                <button type="button" class="btn add-button w-100 py-3 mb-4" onclick="addSkill()">
+                    <i class="fas fa-plus me-2"></i>新增專業技能
+                </button>
+                
+                <!-- 工作經驗區 -->
+                <div class="section-header p-3 mb-4">
+                    <h3 class="mb-0"><i class="fas fa-briefcase me-2"></i>工作經驗</h3>
+                </div>
+                
+                <div id="experiencesContainer">
+                    <!-- 工作經驗會動態增加 -->
+                </div>
+                
+                <button type="button" class="btn add-button w-100 py-3 mb-4" onclick="addExperience()">
+                    <i class="fas fa-plus me-2"></i>新增工作經驗
+                </button>
+                
+                <!-- 提交按鈕 -->
+                <div class="text-center mb-5">
+                    <button type="button" class="btn btn-secondary me-3" onclick="saveAsDraft()">
+                        <i class="fas fa-save me-1"></i>儲存草稿
+                    </button>
+                    <button type="submit" class="btn btn-primary btn-lg px-5">
+                        <i class="fas fa-check me-1"></i>完成履歷建立
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- 成功提示Modal -->
+<div class="modal fade" id="successModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header bg-success text-white">
+                <h5 class="modal-title">
+                    <i class="fas fa-check-circle me-2"></i>履歷建立成功
+                </h5>
+            </div>
+            <div class="modal-body text-center">
+                <p class="mb-3">您的履歷已成功建立！</p>
+                <p>現在可以開始進行虛擬面試了。</p>
+            </div>
+            <div class="modal-footer justify-content-center">
+                <button type="button" class="btn btn-primary" onclick="window.parent.location.href='/'">
+                    開始面試
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/resume.js') }}"></script>
+{% endblock %} 

@@ -1,0 +1,68 @@
+[tool.poetry]
+name = "virtual-interview-consultant"
+version = "1.4.0"
+description = "AI輔助虛擬面試顧問平台 - 整合職缺媒合、履歷健檢、虛擬面試功能，支援Fay數字人語音表情對嘴與Whisper語音識別"
+authors = ["Virtual Interview Team"]
+readme = "README.md"
+packages = [{include = "virtual_interviewer"}]
+
+[tool.poetry.dependencies]
+python = "^3.8.1"
+Flask = "2.3.3"
+Flask-CORS = "4.0.0"
+Flask-SQLAlchemy = "3.0.5"
+Flask-RESTful = "0.3.10"
+Werkzeug = "2.3.7"
+SQLAlchemy = "2.0.21"
+python-dotenv = "1.0.0"
+marshmallow = "3.20.1"
+# STT語音識別依賴 (待實際部署時取消註解)
+# openai-whisper = "^20231117"
+# torch = "^2.1.0"
+# torchaudio = "^2.1.0"
+# ffmpeg-python = "^0.2.0"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^7.4.0"
+pytest-flask = "^1.2.0"
+black = "^23.0.0"
+flake8 = "^6.0.0"
+isort = "^5.12.0"
+
+[tool.poetry.group.prod.dependencies]
+gunicorn = "^21.2.0"
+
+[tool.poetry.scripts]
+start = "run:main"
+dev = "app:app"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 88
+target-version = ['py38']
+include = '\.pyi?$'
+extend-exclude = '''
+/(
+  # directories
+  \.eggs
+  | \.git
+  | \.hg
+  | \.mypy_cache
+  | \.tox
+  | \.venv
+  | build
+  | dist
+)/
+'''
+
+[tool.isort]
+profile = "black"
+multi_line_output = 3
+line_length = 88
+
+[tool.flake8]
+max-line-length = 88
+extend-ignore = ["E203", "W503"] 

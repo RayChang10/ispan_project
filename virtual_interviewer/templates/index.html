@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+
+{% block title %}主頁 - 虛擬面試顧問{% endblock %}
+
+{% block content %}
+<div class="container-fluid p-0" style="height: calc(100vh - 120px);">
+    <div class="row h-100 g-0">
+        <!-- 左側：虛擬人介面 (1/3) -->
+        <div class="col-lg-4 bg-light border-end">
+            <div class="d-flex flex-column h-100">
+                <!-- 虛擬人頭像區域 -->
+                <div class="p-4 text-center flex-grow-1 d-flex flex-column justify-content-center">
+                    <div class="virtual-avatar mb-3">
+                        <img src="{{ url_for('static', filename='img/avatar.png') }}" alt="虛擬面試官"
+                            class="img-fluid rounded-circle shadow-lg"
+                            style="width: 200px; height: 200px; object-fit: cover;"
+                            onerror="this.src='https://via.placeholder.com/200x200/4a90e2/ffffff?text=AI+面試官'">
+                    </div>
+                    <h4 class="text-primary mb-2">AI 面試官</h4>
+                    <p class="text-muted mb-3">您好！我是您的虛擬面試顧問，準備好開始面試了嗎？</p>
+
+                    <!-- 面試狀態指示 -->
+                    <div class="interview-status">
+                        <span class="badge bg-success" id="interviewStatus">
+                            <i class="fas fa-circle me-1" style="font-size: 0.8em;"></i>準備就緒
+                        </span>
+                    </div>
+                </div>
+
+                <!-- 虛擬人控制按鈕 -->
+                <div class="p-3 border-top">
+                    <div class="row g-2">
+                        <div class="col-6">
+                            <button class="btn btn-outline-primary btn-sm w-100" id="startInterview">
+                                <i class="fas fa-play me-1"></i>開始面試
+                            </button>
+                        </div>
+                        <div class="col-6">
+                            <button class="btn btn-outline-secondary btn-sm w-100" id="resetInterview">
+                                <i class="fas fa-refresh me-1"></i>重新開始
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 右側：對話區域 (2/3) -->
+        <div class="col-lg-8">
+            <div class="d-flex flex-column h-100">
+                <!-- 對話記錄區域 (上方2/3) -->
+                <div class="flex-grow-1 p-3" style="overflow-y: auto; max-height: 70vh;">
+                    <div class="chat-messages" id="chatMessages">
+                        <!-- 歡迎訊息 -->
+                        <div class="message ai-message mb-3">
+                            <div class="d-flex align-items-start">
+                                <div class="avatar me-3">
+                                    <img src="https://via.placeholder.com/40x40/4a90e2/ffffff?text=AI"
+                                        class="rounded-circle" width="40" height="40">
+                                </div>
+                                <div class="message-content">
+                                    <div class="bg-primary text-white rounded-3 p-3">
+                                        <p class="mb-0">歡迎使用虛擬面試顧問！我會幫助您進行模擬面試。請先建立您的履歷資料，或直接開始對話練習。</p>
+                                    </div>
+                                    <small class="text-muted ms-1">剛才</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 對話輸入區域 (下方1/3) -->
+                <div class="border-top p-3">
+                    <!-- 輸入框 -->
+                    <div class="row mb-3">
+                        <div class="col">
+                            <div class="input-group">
+                                <textarea class="form-control" id="messageInput" placeholder="輸入您的回答或問題..." rows="3"
+                                    style="resize: none;"></textarea>
+                                <button class="btn btn-primary" id="sendMessage">
+                                    <i class="fas fa-paper-plane"></i>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 功能按鈕 -->
+                    <div class="row g-2">
+                        <div class="col-lg-3 col-md-6">
+                            <button class="btn btn-outline-info w-100" id="voiceInput">
+                                <i class="fas fa-microphone me-1"></i>語音輸入
+                            </button>
+                        </div>
+                        <div class="col-lg-3 col-md-6">
+                            <input type="file" class="d-none" id="fileInput" accept=".pdf,.doc,.docx">
+                            <button class="btn btn-outline-warning w-100" id="fileUpload">
+                                <i class="fas fa-upload me-1"></i>上傳履歷
+                            </button>
+                        </div>
+                        <div class="col-lg-3 col-md-6">
+                            <button class="btn btn-outline-success w-100" id="manualResume" data-bs-toggle="modal"
+                                data-bs-target="#resumeModal">
+                                <i class="fas fa-edit me-1"></i>手動輸入履歷
+                            </button>
+                        </div>
+                        <div class="col-lg-3 col-md-6">
+                            <button class="btn btn-outline-primary w-100" id="confirmInput" disabled>
+                                <i class="fas fa-check me-1"></i>確認輸入
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 履歷輸入Modal -->
+<div class="modal fade" id="resumeModal" tabindex="-1" aria-labelledby="resumeModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="resumeModalLabel">
+                    <i class="fas fa-user-edit me-2"></i>履歷資料輸入
+                </h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <iframe src="{{ url_for('resume') }}" style="width: 100%; height: 600px; border: none;"></iframe>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/interview.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,211 @@
+/* 全域樣式 */
+:root {
+    --primary-color: #007bff;
+    --secondary-color: #6c757d;
+    --success-color: #28a745;
+    --info-color: #17a2b8;
+    --warning-color: #ffc107;
+    --danger-color: #dc3545;
+    --light-color: #f8f9fa;
+    --dark-color: #343a40;
+}
+
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background-color: #f8f9fa;
+}
+
+/* 聊天介面樣式 */
+.chat-messages {
+    min-height: 400px;
+}
+
+.message {
+    margin-bottom: 15px;
+}
+
+.user-message .message-content {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.user-message .bg-primary {
+    background-color: var(--success-color) !important;
+    max-width: 70%;
+}
+
+.ai-message .bg-primary {
+    background-color: var(--primary-color) !important;
+    max-width: 70%;
+}
+
+.message .avatar img {
+    border: 2px solid #e9ecef;
+}
+
+/* 虛擬人介面樣式 */
+.virtual-avatar {
+    animation: float 3s ease-in-out infinite;
+}
+
+@keyframes float {
+    0%, 100% { transform: translateY(0px); }
+    50% { transform: translateY(-10px); }
+}
+
+.interview-status .badge {
+    animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.05); }
+    100% { transform: scale(1); }
+}
+
+/* 表單樣式 */
+.form-control:focus,
+.form-select:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+.btn-primary {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+    transition: all 0.3s ease;
+}
+
+.btn-primary:hover {
+    background-color: #0056b3;
+    border-color: #004085;
+    transform: translateY(-1px);
+}
+
+/* 履歷表單特殊樣式 */
+.experience-card {
+    position: relative;
+}
+
+.experience-card .delete-btn {
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.experience-card:hover .delete-btn {
+    opacity: 1;
+}
+
+/* 響應式設計 */
+@media (max-width: 768px) {
+    .virtual-avatar img {
+        width: 150px !important;
+        height: 150px !important;
+    }
+    
+    .col-lg-4 {
+        min-height: 300px;
+    }
+    
+    .chat-messages {
+        max-height: 50vh !important;
+    }
+}
+
+/* 載入動畫 */
+.loading {
+    display: inline-block;
+    width: 20px;
+    height: 20px;
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid var(--primary-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+}
+
+/* 工具提示樣式 */
+.tooltip-inner {
+    background-color: var(--dark-color);
+    color: white;
+}
+
+.tooltip.bs-tooltip-top .tooltip-arrow::before {
+    border-top-color: var(--dark-color);
+}
+
+/* 自定義滾動條 */
+.chat-messages::-webkit-scrollbar {
+    width: 6px;
+}
+
+.chat-messages::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 10px;
+}
+
+.chat-messages::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 10px;
+}
+
+.chat-messages::-webkit-scrollbar-thumb:hover {
+    background: #555;
+}
+
+/* 動畫效果 */
+.fade-in {
+    animation: fadeIn 0.5s ease-in;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(20px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.slide-in-right {
+    animation: slideInRight 0.5s ease-out;
+}
+
+@keyframes slideInRight {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+.slide-in-left {
+    animation: slideInLeft 0.5s ease-out;
+}
+
+@keyframes slideInLeft {
+    from { transform: translateX(-100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+/* 特殊效果 */
+.glass-effect {
+    background: rgba(255, 255, 255, 0.25);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.gradient-bg {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+/* 狀態指示器 */
+.status-indicator {
+    display: inline-block;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin-right: 8px;
+}
+
+.status-online { background-color: var(--success-color); }
+.status-offline { background-color: var(--secondary-color); }
+.status-busy { background-color: var(--warning-color); }
+.status-away { background-color: var(--danger-color); } 

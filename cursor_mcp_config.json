@@ -1,0 +1,11 @@
+{
+    "mcpServers": {
+        "mcp-tools-multi-agent": {
+            "command": "C:\\Users\\student\\AppData\\Local\\Programs\\Python\\Python313\\python.exe",
+            "args": [
+                "C:\\Share\\mcp\\simple_server.py"
+            ],
+            "cwd": "C:\\Share\\mcp"
+        }
+    }
+}

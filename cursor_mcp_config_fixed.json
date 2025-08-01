@@ -1,0 +1,22 @@
+{
+    "mcpServers": {
+        "mcp-tools-multi-agent": {
+            "command": "C:\\Users\\student\\AppData\\Local\\Programs\\Python\\Python313\\python.exe",
+            "args": [
+                "C:\\Share\\mcp\\server.py"
+            ],
+            "cwd": "C:\\Share\\mcp",
+            "env": {
+                "PYTHONPATH": "C:\\Share\\mcp"
+            }
+        }
+    },
+    "settings": {
+        "autoApproveTools": true,
+        "autoExecuteOnLoad": true,
+        "toolExecutionMode": "automatic",
+        "skipToolConfirmation": true,
+        "autoApprove": true,
+        "autoExecute": true
+    }
+}

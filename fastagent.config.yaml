@@ -1,0 +1,77 @@
+# Fast Agent MCP 配置檔案
+# 只使用 OpenAI 模型
+
+# 模型配置 - 只使用 OpenAI
+models:
+  default: "gpt-4o-mini"
+  available:
+    - "gpt-4o"
+    - "gpt-4o-mini"
+    - "gpt-4-turbo"
+    - "gpt-3.5-turbo"
+
+# 明確指定提供者配置 - 只啟用 OpenAI
+providers:
+  openai:
+    enabled: true
+    api_key: "${OPENAI_API_KEY}"
+
+# MCP 伺服器配置
+mcp:
+  servers:
+    interview:
+      command: ".venv\\Scripts\\python.exe"
+      args: ["server.py"]
+      env:
+        PYTHONPATH: "."
+        PYTHONUNBUFFERED: "1"
+
+# Agent 配置 - 只使用 OpenAI
+agents:
+  question_agent:
+    model: "gpt-4o-mini"
+    instruction: "負責生成和管理面試問題，提供隨機問題、按類別篩選、按難度篩選等功能"
+    servers: ["interview"]
+  
+  analysis_agent:
+    model: "gpt-4o-mini"
+    instruction: "負責分析用戶回答並評分，提供詳細的評估報告和改進建議"
+    servers: ["interview"]
+  
+  answer_agent:
+    model: "gpt-4o-mini"
+    instruction: "負責提供標準答案和解釋，包含答案要點和詳細說明"
+    servers: ["interview"]
+  
+  interview_system:
+    model: "gpt-4o-mini"
+    instruction: |
+      完整的智能面試系統 Agent
+      
+      功能：
+      1. 生成面試問題
+      2. 分析用戶回答
+      3. 提供標準答案
+      4. 生成面試報告
+      
+      使用方式：
+      - 直接對話獲取面試問題
+      - 提供回答進行分析
+      - 請求標準答案和解釋
+    servers: ["interview"]
+
+# 設定 - 只使用 OpenAI
+settings:
+  # 日誌級別
+  log_level: "INFO"
+  
+  # 互動模式
+  interactive: true
+  
+  # 安靜模式（禁用進度和訊息顯示）
+  quiet: false
+  
+  # OpenAI 模型參數
+  model_params:
+    temperature: 0.7
+    max_tokens: 4000 
