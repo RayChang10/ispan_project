@@ -14,12 +14,42 @@ logger = logging.getLogger(__name__)
 class AnswerAnalyzer:
     """答案分析器"""
 
-    def __init__(self):
+    def __init__(self, use_ai=True):
         self.grade_thresholds = {"優秀": 80, "良好": 60, "一般": 40, "需要改進": 0}
+        self.use_ai = use_ai
 
-    def analyze_answer(self, user_answer: str, standard_answer: str) -> Dict[str, Any]:
+        # 如果啟用 AI，嘗試導入 AI 分析器
+        if self.use_ai:
+            try:
+                from .ai_answer_analyzer import ai_answer_analyzer
+
+                self.ai_analyzer = ai_answer_analyzer
+            except ImportError:
+                logger.warning("AI 分析器導入失敗，將使用傳統方法")
+                self.use_ai = False
+                self.ai_analyzer = None
+
+    def analyze_answer(
+        self, user_answer: str, standard_answer: str, question: str = ""
+    ) -> Dict[str, Any]:
         """分析用戶回答與標準答案的差異"""
 
+        # 如果啟用 AI 且有 AI 分析器，優先使用 AI
+        if self.use_ai and self.ai_analyzer:
+            try:
+                return self.ai_analyzer.analyze_answer(
+                    user_answer, standard_answer, question
+                )
+            except Exception as e:
+                logger.warning(f"AI 分析失敗，回退到傳統方法: {e}")
+
+        # 使用傳統方法
+        return self._traditional_analysis(user_answer, standard_answer)
+
+    def _traditional_analysis(
+        self, user_answer: str, standard_answer: str
+    ) -> Dict[str, Any]:
+        """傳統分析方法"""
         # 計算相似度
         similarity = SequenceMatcher(
             None, user_answer.lower(), standard_answer.lower()
@@ -40,6 +70,7 @@ class AnswerAnalyzer:
             "feedback": feedback,
             "user_answer": user_answer,
             "standard_answer": standard_answer,
+            "analysis_method": "Traditional",
         }
 
     def _analyze_differences(self, user_answer: str, standard_answer: str) -> list:
