@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>面試系統測試</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .chat-box {
+            height: 400px;
+            border: 1px solid #ddd;
+            padding: 10px;
+            overflow-y: auto;
+            background: #fafafa;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+
+        .message {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 4px;
+        }
+
+        .user-message {
+            background: #e3f2fd;
+            margin-left: 20%;
+        }
+
+        .ai-message {
+            background: #f1f8e9;
+            margin-right: 20%;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        input[type="text"] {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+
+        button {
+            padding: 10px 20px;
+            background: #2196f3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #1976d2;
+        }
+
+        .status {
+            padding: 10px;
+            background: #fff3cd;
+            border: 1px solid #ffeaa7;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+
+        .quick-buttons {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+            flex-wrap: wrap;
+        }
+
+        .quick-btn {
+            padding: 5px 10px;
+            background: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+        }
+
+        .quick-btn:hover {
+            background: #545b62;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>🎯 面試系統測試</h1>
+
+        <div class="status">
+            <strong>📋 測試說明：</strong><br>
+            1. 使用固定 user_id: <code>interview_user_001</code><br>
+            2. 按順序測試：自我介紹 → 介紹完了 → 請給我問題 → 回答問題<br>
+            3. 或使用快速按鈕進行測試
+        </div>
+
+        <div class="chat-box" id="chatBox">
+            <div class="message ai-message">
+                👋 歡迎使用面試系統！請開始您的自我介紹。
+            </div>
+        </div>
+
+        <div class="quick-buttons">
+            <button class="quick-btn" onclick="sendMessage('我叫小明，今年25歲')">自我介紹</button>
+            <button class="quick-btn" onclick="sendMessage('介紹完了')">完成介紹</button>
+            <button class="quick-btn" onclick="sendMessage('請給我問題')">請求問題</button>
+            <button class="quick-btn" onclick="sendMessage('PostgreSQL 版本可以通過 psql --version 查看')">回答問題</button>
+        </div>
+
+        <div class="input-group">
+            <input type="text" id="messageInput" placeholder="輸入您的訊息..." onkeypress="handleKeyPress(event)">
+            <button onclick="sendMessage()">發送</button>
+        </div>
+
+        <div class="status" id="statusBox">
+            <strong>📊 狀態：</strong><span id="currentStatus">intro</span> |
+            <strong>用戶ID：</strong><span id="userId">interview_user_001</span>
+        </div>
+    </div>
+
+    <script>
+        const FIXED_USER_ID = "interview_user_001";
+        let currentState = "intro";
+
+        function addMessage(message, isUser = false) {
+            const chatBox = document.getElementById('chatBox');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isUser ? 'user-message' : 'ai-message'}`;
+            messageDiv.textContent = message;
+            chatBox.appendChild(messageDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        function updateStatus(state, userId) {
+            document.getElementById('currentStatus').textContent = state;
+            document.getElementById('userId').textContent = userId;
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        async function sendMessage(message = null) {
+            const input = document.getElementById('messageInput');
+            const userMessage = message || input.value.trim();
+
+            if (!userMessage) return;
+
+            // 顯示用戶訊息
+            addMessage(userMessage, true);
+            input.value = '';
+
+            try {
+                const response = await fetch('/api/interview', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        message: userMessage,
+                        user_id: FIXED_USER_ID
+                    })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    // 顯示 AI 回應
+                    addMessage(result.response);
+
+                    // 更新狀態
+                    currentState = result.current_state;
+                    updateStatus(result.current_state, FIXED_USER_ID);
+
+                    console.log('API 回應:', result);
+                } else {
+                    addMessage(`❌ 錯誤: ${result.message}`);
+                }
+            } catch (error) {
+                addMessage(`❌ 網路錯誤: ${error.message}`);
+                console.error('請求錯誤:', error);
+            }
+        }
+
+        // 初始化狀態
+        updateStatus(currentState, FIXED_USER_ID);
+    </script>
+</body>
+
+</html>

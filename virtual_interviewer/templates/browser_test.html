@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>面試系統測試頁面</title>
+    <!-- 添加快取控制 -->
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .chat-container {
+            background: white;
+            border-radius: 10px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            height: 400px;
+            overflow-y: auto;
+        }
+
+        .message {
+            margin: 10px 0;
+            padding: 10px;
+            border-radius: 5px;
+        }
+
+        .user-message {
+            background-color: #e3f2fd;
+            margin-left: 20%;
+        }
+
+        .bot-message {
+            background-color: #f1f1f1;
+            margin-right: 20%;
+        }
+
+        .input-container {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        #messageInput {
+            flex: 1;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+
+        button {
+            padding: 10px 20px;
+            background-color: #007bff;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #0056b3;
+        }
+
+        .status {
+            background-color: #fff3cd;
+            border: 1px solid #ffeaa7;
+            padding: 10px;
+            border-radius: 5px;
+            margin-bottom: 10px;
+        }
+
+        .test-buttons {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .test-button {
+            background-color: #28a745;
+            font-size: 12px;
+        }
+
+        .error {
+            background-color: #f8d7da;
+            border: 1px solid #f5c6cb;
+            color: #721c24;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>🎯 面試系統測試頁面</h1>
+
+    <div class="status">
+        <strong>📊 當前狀態:</strong> <span id="currentState">載入中...</span>
+        <br>
+        <strong>👤 用戶 ID:</strong> <span id="userId">interview_user_001</span>
+    </div>
+
+    <div class="test-buttons">
+        <button class="test-button" onclick="sendTestMessage('我叫小明，畢業於台大資工系')">1. 自我介紹</button>
+        <button class="test-button" onclick="sendTestMessage('介紹完了')">2. 完成介紹</button>
+        <button class="test-button" onclick="sendTestMessage('請給我問題')">3. 請求問題</button>
+        <button class="test-button" onclick="sendTestMessage('PostgreSQL 的版本可以通過 psql --version 命令查看')">4. 回答問題</button>
+        <button class="test-button" onclick="clearChat()">清除對話</button>
+    </div>
+
+    <div class="chat-container" id="chatContainer">
+        <div class="message bot-message">
+            👋 歡迎使用面試系統測試頁面！<br>
+            💡 請按照順序點擊按鈕進行測試，或直接在下方輸入訊息。
+        </div>
+    </div>
+
+    <div class="input-container">
+        <input type="text" id="messageInput" placeholder="輸入訊息..." onkeypress="handleKeyPress(event)">
+        <button onclick="sendMessage()">發送</button>
+    </div>
+
+    <script>
+        // 動態獲取當前主機的 IP 地址
+        function getServerIP() {
+            // 從當前頁面 URL 獲取主機地址
+            const currentHost = window.location.hostname;
+            const currentPort = window.location.port || '5000';
+            return `${currentHost}:${currentPort}`;
+        }
+
+        // 添加隨機參數避免快取
+        const timestamp = new Date().getTime();
+        const serverIP = getServerIP();
+        const API_URL = `http://${serverIP}/api/interview?t=${timestamp}`;
+
+        console.log('🌐 使用 API 地址:', API_URL);
+
+        const FIXED_USER_ID = "interview_user_001";
+        let currentState = "intro";
+
+        function addMessage(message, isUser = false) {
+            const chatContainer = document.getElementById('chatContainer');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isUser ? 'user-message' : 'bot-message'}`;
+            messageDiv.innerHTML = message;
+            chatContainer.appendChild(messageDiv);
+            chatContainer.scrollTop = chatContainer.scrollHeight;
+        }
+
+        function updateState(state) {
+            currentState = state;
+            document.getElementById('currentState').textContent = state;
+        }
+
+        function showError(error) {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error';
+            errorDiv.innerHTML = `❌ 錯誤: ${error}`;
+            document.getElementById('chatContainer').appendChild(errorDiv);
+        }
+
+        async function sendMessage() {
+            const messageInput = document.getElementById('messageInput');
+            const message = messageInput.value.trim();
+
+            if (!message) return;
+
+            addMessage(`👤 我: ${message}`, true);
+            messageInput.value = '';
+
+            try {
+                console.log('📤 發送請求到:', API_URL);
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Cache-Control': 'no-cache'
+                    },
+                    body: JSON.stringify({
+                        message: message,
+                        user_id: FIXED_USER_ID
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+                console.log('📥 收到回應:', data);
+
+                if (data.current_state) {
+                    updateState(data.current_state);
+                }
+
+                if (data.response) {
+                    addMessage(`🤖 系統: ${data.response}`);
+                }
+
+            } catch (error) {
+                console.error('發送訊息失敗:', error);
+                showError(error.message);
+            }
+        }
+
+        function sendTestMessage(message) {
+            document.getElementById('messageInput').value = message;
+            sendMessage();
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        function clearChat() {
+            document.getElementById('chatContainer').innerHTML = `
+                <div class="message bot-message">
+                    👋 對話已清除！<br>
+                    💡 請按照順序點擊按鈕進行測試。
+                </div>
+            `;
+            updateState("intro");
+        }
+
+        // 頁面載入時顯示用戶 ID 和 API 地址
+        document.getElementById('userId').textContent = FIXED_USER_ID;
+        console.log('🚀 頁面載入完成，API 地址:', API_URL);
+    </script>
+</body>
+
+</html>

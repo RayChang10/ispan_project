@@ -1,11 +1,94 @@
 import os
 from datetime import datetime
+from enum import Enum
 
 from dotenv import load_dotenv
 from flask import Flask, jsonify, render_template, request
 from flask_cors import CORS
 from flask_restful import Api, Resource
 from flask_sqlalchemy import SQLAlchemy
+
+
+# 面試狀態枚舉
+class InterviewState(Enum):
+    WAITING = "waiting"  # 等待開始面試
+    INTRO = "intro"  # 自我介紹階段
+    INTRO_ANALYSIS = "intro_analysis"  # 自我介紹分析階段
+    QUESTIONING = "questioning"  # 面試提問階段
+    COMPLETED = "completed"  # 面試完成階段
+
+
+# 狀態管理函數
+def get_system_prompt(state: InterviewState) -> str:
+    """根據當前狀態獲取系統提示詞"""
+    if state == InterviewState.WAITING:
+        return """
+你現在是一個智能面試官助手，目前處於「等待開始」階段。
+
+- 歡迎用戶，說明面試流程
+- 等待用戶按下「開始面試」按鈕
+- 在未開始面試前，可以進行一般對話和系統介紹
+- 不要主動開始面試流程
+"""
+    elif state == InterviewState.INTRO:
+        return """
+你現在是一個面試官助手，目前進行到「自我介紹階段」。
+
+- 請明確要求用戶進行完整的自我介紹
+- 不論用戶說什麼，都當成是自我介紹內容
+- 收集用戶的自我介紹內容，但不要分析或評論
+- 使用 `intro_collector` 工具將內容儲存
+- 引導用戶說出完整的自我介紹（開場、學經歷、技能、成果、職缺連結、結語）
+- 當用戶說「介紹完了」或類似話語時，進入分析階段
+"""
+    elif state == InterviewState.INTRO_ANALYSIS:
+        return """
+你現在是一個面試官助手，目前進行到「自我介紹分析階段」。
+
+- 使用 `analyze_intro` 工具分析用戶的自我介紹
+- 依據6個標準進行分析：開場簡介、學經歷概述、核心技能與強項、代表成果、與職缺的連結、結語與期待
+- 指出缺失的部分並給出具體建議
+- 分析完成後自動進入面試提問階段
+"""
+    elif state == InterviewState.QUESTIONING:
+        return """
+你現在是一個面試官助手，目前進行到「面試提問與回答階段」。
+
+- 使用 `get_question` 工具獲取面試題目並給出
+- 用戶的回答使用 `analyze_answer` 工具分析並評分
+- 顯示標準答案和評分結果
+- 自動進入下一題，除非用戶說「退出」或「結束」
+- 每次回答後都要提醒：「除非說退出，否則會繼續下一題」
+- 完成多個題目後可進入完成階段
+"""
+    elif state == InterviewState.COMPLETED:
+        return """
+你現在是一個面試官助手，目前進行到「面試完成階段」。
+
+- 使用 `generate_final_summary` 工具統合整個面試過程
+- 包含自我介紹分析、面試表現、整體建議
+- 給出專業的面試總結和改進建議
+- 感謝用戶參與面試
+"""
+    else:
+        return "你是一個面試官助手。"
+
+
+def get_available_tools(state: InterviewState):
+    """根據當前狀態獲取可用工具"""
+    if state == InterviewState.WAITING:
+        return ["general_chat"]
+    elif state == InterviewState.INTRO:
+        return ["intro_collector"]
+    elif state == InterviewState.INTRO_ANALYSIS:
+        return ["analyze_intro"]
+    elif state == InterviewState.QUESTIONING:
+        return ["get_question", "analyze_answer"]
+    elif state == InterviewState.COMPLETED:
+        return ["generate_final_summary"]
+    else:
+        return []
+
 
 # 設定 MCP 和 SmartAgent 為不可用
 MCP_AVAILABLE = False
@@ -246,31 +329,163 @@ class UserAPI(Resource):
 
 
 class InterviewAPI(Resource):
+    # 類級別的靜態變數，確保狀態在請求之間保持
+    session_states = {}
+    # 用戶當前問題存儲 - 結構: {user_id: {"question": str, "standard_answer": str, "question_data": dict}}
+    user_current_questions = {}
+
+    def __init__(self):
+        # 初始化狀態管理
+        self.current_state = InterviewState.INTRO
+        # 移除 self.session_states = {}，使用類級別的 session_states
+
+    def _get_user_state(self, user_id):
+        """獲取用戶的當前狀態"""
+        if user_id not in InterviewAPI.session_states:
+            InterviewAPI.session_states[user_id] = InterviewState.WAITING
+        return InterviewAPI.session_states[user_id]
+
+    def _set_user_state(self, user_id, state):
+        """設置用戶的狀態"""
+        InterviewAPI.session_states[user_id] = state
+        print(f"🔄 用戶 {user_id} 狀態變更為: {state.value}")
+
+    def _set_user_current_question(
+        self, user_id, question, standard_answer, question_data=None
+    ):
+        """設置用戶當前問題"""
+        InterviewAPI.user_current_questions[user_id] = {
+            "question": question,
+            "standard_answer": standard_answer,
+            "question_data": question_data,
+        }
+        print(f"📝 用戶 {user_id} 當前問題已設置: {question[:50]}...")
+
+    def _get_user_current_question(self, user_id):
+        """獲取用戶當前問題"""
+        return InterviewAPI.user_current_questions.get(user_id, None)
+
+    def _parse_question_result(self, question_result):
+        """解析問題結果，提取問題文本和標準答案"""
+        try:
+            # 嘗試直接從 MCP 結果獲取
+            if "問題：" in question_result:
+                lines = question_result.split("\n")
+                question_text = ""
+                standard_answer = ""
+
+                for line in lines:
+                    if line.startswith("問題："):
+                        question_text = line.replace("問題：", "").strip()
+                        break
+
+                # 由於這裡只有顯示文本，我們需要直接調用 MCP 獲取完整數據
+                from server import get_random_question as mcp_get_random_question
+
+                mcp_result = mcp_get_random_question()
+                if mcp_result.get("status") == "success":
+                    return mcp_result["question"], mcp_result["standard_answer"]
+
+                return question_text, "標準答案未提供"
+
+            return "問題解析失敗", "標準答案未提供"
+        except Exception as e:
+            print(f"⚠️ 解析問題結果失敗: {str(e)}")
+            return "問題解析失敗", "標準答案未提供"
+
+    def _transition_state(self, user_id, user_message):
+        """根據用戶訊息判斷是否需要狀態轉換"""
+        lower_message = user_message.lower()
+        current_state = self._get_user_state(user_id)
+
+        # 從 WAITING 轉換到 INTRO（按下開始面試按鈕）
+        if current_state == InterviewState.WAITING:
+            start_keywords = [
+                "開始面試",
+                "開始",
+                "start_interview",
+                "開始練習",
+                "準備好了",
+                "可以開始了",
+            ]
+            if any(keyword in lower_message for keyword in start_keywords):
+                self._set_user_state(user_id, InterviewState.INTRO)
+                return True
+
+        # 從 INTRO 轉換到 INTRO_ANALYSIS（完成自我介紹）
+        elif current_state == InterviewState.INTRO:
+            intro_complete_keywords = [
+                "介紹完了",
+                "介紹完畢",
+                "自我介紹完成",
+                "就這樣",
+                "結束了",
+                "完成了",
+                "說完了",
+            ]
+            if any(keyword in lower_message for keyword in intro_complete_keywords):
+                self._set_user_state(user_id, InterviewState.INTRO_ANALYSIS)
+                return True
+
+        # 從 INTRO_ANALYSIS 自動轉換到 QUESTIONING（分析完成後）
+        elif current_state == InterviewState.INTRO_ANALYSIS:
+            # 這個轉換通常由系統自動觸發，不需要用戶訊息
+            pass
+
+        # 從 QUESTIONING 轉換到 COMPLETED（用戶要求退出）
+        elif current_state == InterviewState.QUESTIONING:
+            exit_keywords = ["退出", "結束", "完成", "不想繼續", "停止"]
+            if any(keyword in lower_message for keyword in exit_keywords):
+                self._set_user_state(user_id, InterviewState.COMPLETED)
+                return True
+
+        # 重新開始的情況
+        restart_keywords = ["重新開始", "重新來過", "重新面試", "重來"]
+        if any(keyword in lower_message for keyword in restart_keywords):
+            self._set_user_state(user_id, InterviewState.WAITING)
+            return True
+
+        return False
+
     def post(self):
-        """處理面試對話 - 整合 Fast Agent"""
+        """處理面試對話 - 整合狀態控制與 Fast Agent"""
         try:
             data = request.get_json()
             user_message = data.get("message", "")
-            user_id = data.get("user_id")
+            user_id = data.get("user_id", "default_user")
 
             print(f"🔍 收到用戶訊息: '{user_message}'")
             print(f"🔍 FAST_AGENT_AVAILABLE: {FAST_AGENT_AVAILABLE}")
 
-            # 優先使用 Fast Agent 處理
+            # 獲取當前狀態
+            current_state = self._get_user_state(user_id)
+            print(f"🎯 當前狀態: {current_state.value}")
+
+            # 檢查狀態轉換
+            state_changed = self._transition_state(user_id, user_message)
+            if state_changed:
+                current_state = self._get_user_state(user_id)
+                print(f"🔄 狀態已轉換為: {current_state.value}")
+
+            # 根據狀態選擇處理方式
             if FAST_AGENT_AVAILABLE:
-                print("✅ 使用 Fast Agent 處理")
-                ai_response = self._process_with_fast_agent(user_message)
+                print("✅ 使用狀態控制的 Fast Agent 處理")
+                ai_response = self._process_with_state_controlled_agent(
+                    user_message, current_state
+                )
             else:
-                print("⚠️ 回退到 mock 處理")
-                # 回退到原有邏輯
-                ai_response = self._generate_mock_response(user_message)
+                print("⚠️ 回退到狀態控制的 mock 處理")
+                ai_response = self._generate_state_controlled_mock_response(
+                    user_message, current_state
+                )
 
             print(f"📤 回應: {ai_response[:100]}...")
 
-            # 儲存對話記錄
+            # 儲存對話記錄（包含狀態信息）
             session_data = {
                 "user_message": user_message,
                 "ai_response": ai_response,
+                "current_state": current_state.value,
                 "timestamp": datetime.utcnow().isoformat(),
             }
 
@@ -284,75 +499,854 @@ class InterviewAPI(Resource):
                 "success": True,
                 "response": ai_response,
                 "session_id": interview_session.id,
-                "agent_used": "fast_agent" if FAST_AGENT_AVAILABLE else "mock",
+                "current_state": current_state.value,
+                "agent_used": (
+                    "state_controlled_fast_agent"
+                    if FAST_AGENT_AVAILABLE
+                    else "state_controlled_mock"
+                ),
             }
 
         except Exception as e:
             db.session.rollback()
             return {"success": False, "message": f"處理面試對話失敗: {str(e)}"}, 400
 
-    def _process_with_fast_agent(self, user_message):
-        """使用 Fast Agent 處理用戶訊息"""
+    def _process_with_state_controlled_agent(
+        self, user_message, current_state, interview_data=None
+    ):
+        """使用狀態控制的 Fast Agent 處理用戶訊息"""
+        try:
+            print(
+                f"🔍 開始狀態控制處理: '{user_message}' (狀態: {current_state.value})"
+            )
+
+            # 根據狀態獲取系統提示詞和可用工具
+            system_prompt = get_system_prompt(current_state)
+            available_tools = get_available_tools(current_state)
+
+            print(f"🎯 系統提示詞: {system_prompt[:100]}...")
+            print(f"🛠️ 可用工具: {available_tools}")
+
+            # 檢查是否有面試數據且用戶要求退出/總結（任何狀態下都可以）
+            lower_message = user_message.lower()
+            exit_keywords = ["退出", "結束", "完成", "不想繼續", "停止"]
+            if interview_data and any(
+                keyword in lower_message for keyword in exit_keywords
+            ):
+                # 強制進入完成狀態並生成總結
+                user_id = "default_user"
+                self._set_user_state(user_id, InterviewState.COMPLETED)
+                return self._process_completed_state(
+                    user_message, system_prompt, interview_data
+                )
+
+            # 根據狀態選擇處理策略
+            if current_state == InterviewState.WAITING:
+                return self._process_waiting_state(user_message, system_prompt)
+            elif current_state == InterviewState.INTRO:
+                return self._process_intro_state(user_message, system_prompt)
+            elif current_state == InterviewState.INTRO_ANALYSIS:
+                return self._process_intro_analysis_state(user_message, system_prompt)
+            elif current_state == InterviewState.QUESTIONING:
+                return self._process_questioning_state(user_message, system_prompt)
+            elif current_state == InterviewState.COMPLETED:
+                return self._process_completed_state(
+                    user_message, system_prompt, interview_data
+                )
+            else:
+                return self._default_response(user_message)
+
+        except Exception as e:
+            print(f"❌ 狀態控制處理失敗: {e}")
+            return f"處理失敗: {str(e)}"
+
+    def _process_waiting_state(self, user_message, system_prompt):
+        """處理等待開始階段的訊息"""
+        try:
+            # 檢查是否為開始面試的關鍵字
+            lower_message = user_message.lower()
+            start_keywords = [
+                "開始面試",
+                "開始",
+                "start_interview",
+                "開始練習",
+                "準備好了",
+                "可以開始了",
+            ]
+
+            if any(keyword in lower_message for keyword in start_keywords):
+                return """
+🎯 面試開始！
+
+歡迎參加智能面試系統！接下來我們將進行以下流程：
+
+1️⃣ **自我介紹階段**：請進行完整的自我介紹
+2️⃣ **自我介紹分析**：我會分析您的介紹並給出建議  
+3️⃣ **面試問答**：進行技術或行為面試問題
+4️⃣ **總結建議**：給出最終的面試表現總結
+
+現在請開始您的自我介紹。請盡量包含以下要素：
+- 開場簡介（身份與專業定位）
+- 學經歷概述  
+- 核心技能與強項
+- 代表成果
+- 與職缺的連結
+- 結語與期待
+
+請開始您的自我介紹：
+                """
+            else:
+                return f"""
+👋 您好！歡迎使用智能面試系統！
+
+我是您的AI面試官，準備為您提供專業的模擬面試體驗。
+
+🎯 **面試流程說明**：
+1. 自我介紹 → 2. 介紹分析 → 3. 技術問答 → 4. 總結建議
+
+請點擊「開始面試」按鈕，或輸入「開始面試」來開始您的面試之旅！
+
+您也可以隨時向我詢問面試相關的問題。
+
+您說：「{user_message}」
+                """
+        except Exception as e:
+            return f"處理等待階段訊息失敗: {str(e)}"
+
+    def _process_intro_state(self, user_message, system_prompt):
+        """處理自我介紹階段的訊息"""
         try:
             lower_message = user_message.lower()
 
-            # 檢查是否為獲取問題的請求
-            if any(word in lower_message for word in ["問題", "題目", "面試"]):
-                # 獲取面試問題
+            # 特殊處理：如果是「開始面試」訊息，返回歡迎和指導訊息
+            start_keywords = ["開始面試", "start_interview"]
+            if any(keyword in lower_message for keyword in start_keywords):
+                # 不清除自我介紹內容，因為用戶可能已經開始介紹了
+
+                return """
+🎯 面試開始！
+
+歡迎參加智能面試系統！接下來我們將進行以下流程：
+
+1️⃣ **自我介紹階段**：請進行完整的自我介紹
+2️⃣ **自我介紹分析**：我會分析您的介紹並給出建議  
+3️⃣ **面試問答**：進行技術或行為面試問題
+4️⃣ **總結建議**：給出最終的面試表現總結
+
+現在請開始您的自我介紹。請盡量包含以下要素：
+- 開場簡介（身份與專業定位）
+- 學經歷概述  
+- 核心技能與強項
+- 代表成果
+- 與職缺的連結
+- 結語與期待
+
+請開始您的自我介紹：
+                """
+
+            # 檢查是否為結束自我介紹的關鍵字
+            intro_end_keywords = [
+                "介紹完了",
+                "介紹完畢",
+                "自我介紹完成",
+                "就這樣",
+                "結束了",
+                "完成了",
+                "說完了",
+                "介紹結束",
+            ]
+            if any(keyword in lower_message for keyword in intro_end_keywords):
+                # 觸發狀態轉換到自我介紹分析階段
+                user_id = "default_user"  # 這裡應該從請求中獲取
+                self._set_user_state(user_id, InterviewState.INTRO_ANALYSIS)
+                # 直接調用分析階段的處理
+                return self._process_intro_analysis_state(user_message, system_prompt)
+            # 不論內容為何都呼叫 intro_collector
+            result = call_fast_agent_function(
+                "intro_collector", user_message=user_message
+            )
+            if result.get("success"):
+                return "✅ 已記錄您的自我介紹內容。請繼續介紹，或說「介紹完了」來開始面試。"
+            else:
+                return f"記錄自我介紹失敗: {result.get('error', '未知錯誤')}"
+        except Exception as e:
+            return f"處理自我介紹失敗: {str(e)}"
+
+    def _process_questioning_state(self, user_message, system_prompt):
+        """處理面試提問階段的訊息"""
+        try:
+            lower_message = user_message.lower()
+
+            # 檢查是否為退出關鍵字
+            exit_keywords = ["退出", "結束", "完成", "不想繼續", "停止"]
+            if any(keyword in lower_message for keyword in exit_keywords):
+                # 用戶要求退出，轉換到完成階段
+                user_id = "default_user"  # 這裡應該從請求中獲取
+                self._set_user_state(user_id, InterviewState.COMPLETED)
+                return self._process_completed_state(user_message, system_prompt, None)
+
+            # 檢查是否為自動請求問題（前端發出的精確請求）
+            if user_message.strip() == "請給我問題":
+                # 前端自動請求下一題 - 需要先檢查是否有待分析的答案
+                user_id = "default_user"  # 這裡應該從請求中獲取
+
+                # 清除舊的問題數據，為新問題做準備
+                print(f"🔄 清除用戶 {user_id} 的舊問題數據，準備新問題")
+
                 result = call_fast_agent_function("get_question")
                 if result.get("success"):
-                    return result["result"]
+                    # 從新的問題數據結構中獲取信息
+                    question_data = result.get("question_data", {})
+                    question_text = question_data.get("question", "問題獲取失敗")
+                    standard_answer = question_data.get(
+                        "standard_answer", "標準答案未提供"
+                    )
+
+                    # 存儲當前問題數據，包含完整的問題信息
+                    self._set_user_current_question(
+                        user_id, question_text, standard_answer, question_data
+                    )
+
+                    print(f"✅ 新問題已設置: {question_text[:50]}...")
+                    print(f"📝 標準答案已設置: {standard_answer[:50]}...")
+
+                    return f"""
+🎯 **面試問題**
+
+{result["result"]}
+
+---
+
+💡 **提示**: 請仔細回答上述問題。除非您說「退出」，否則我們會在您回答後繼續下一題。
+                    """
                 else:
                     return f"獲取問題失敗: {result.get('error', '未知錯誤')}"
-
-            # 檢查是否為其他指令
-            elif any(word in lower_message for word in ["標準", "答案", "解釋"]):
-                # 獲取標準答案
-                result = call_fast_agent_function("get_standard_answer")
-                if result.get("success"):
-                    return result["result"]
-                else:
-                    return f"獲取標準答案失敗: {result.get('error', '未知錯誤')}"
-
-            elif any(word in lower_message for word in ["開始", "start"]):
-                # 開始面試
-                result = call_fast_agent_function("start_interview")
-                if result.get("success"):
-                    return result["result"]
-                else:
-                    return f"開始面試失敗: {result.get('error', '未知錯誤')}"
-
             else:
-                # 對於任何其他輸入，都當作回答進行分析
-                # 先分析答案
-                analysis_result = call_fast_agent_function(
-                    "analyze_answer",
-                    user_answer=user_message,
-                    question="面試問題",
-                    standard_answer="標準答案",
+                # 用戶的回答，使用 analyze_answer 工具分析
+                user_id = "default_user"  # 這裡應該從請求中獲取
+                current_question_data = self._get_user_current_question(user_id)
+
+                if current_question_data:
+                    print(
+                        f"📊 分析用戶回答對應問題: {current_question_data['question'][:50]}..."
+                    )
+
+                    # 傳遞完整的問題上下文
+                    result = call_fast_agent_function(
+                        "analyze_answer",
+                        user_answer=user_message,
+                        question=current_question_data["question"],
+                        standard_answer=current_question_data["standard_answer"],
+                    )
+
+                    if result.get("success"):
+                        # 分析成功後，保持問題數據直到下一題被請求
+                        print(f"✅ 答案分析完成，問題數據保持不變")
+
+                        response = f"""
+{result["result"]}
+
+---
+
+💡 **提示**: 請等待系統準備下一題...
+                        """
+                        return response
+                    else:
+                        return f"分析回答失敗: {result.get('error', '未知錯誤')}"
+                else:
+                    # 沒有當前問題數據，嘗試進行基礎分析
+                    print(f"⚠️ 警告：沒有找到對應的問題數據，進行基礎分析")
+                    result = call_fast_agent_function(
+                        "analyze_answer", user_answer=user_message
+                    )
+
+                    if result.get("success"):
+                        response = f"""
+{result["result"]}
+
+---
+
+⚠️ **注意**: 無法找到對應的問題，這可能導致分析不夠準確。
+💡 **提示**: 請等待系統準備下一題...
+                        """
+                        return response
+                    else:
+                        return f"分析回答失敗: {result.get('error', '未知錯誤')}"
+
+        except Exception as e:
+            return f"處理面試回答失敗: {str(e)}"
+
+    def _process_intro_analysis_state(self, user_message, system_prompt):
+        """處理自我介紹分析階段"""
+        try:
+            # 獲取收集到的完整自我介紹內容
+            from fast_agent_bridge import get_collected_intro
+
+            collected_intro = get_collected_intro("default_user")
+
+            # 如果沒有收集到內容，使用當前訊息
+            intro_content = collected_intro if collected_intro else user_message
+
+            print(f"📊 準備分析自我介紹: {intro_content[:100]}...")
+
+            # 分析完整的自我介紹內容
+            result = call_fast_agent_function(
+                "analyze_intro", user_message=intro_content
+            )
+            if result.get("success"):
+                # 分析完成後自動轉換到面試階段
+                user_id = "default_user"  # 這裡應該從請求中獲取
+                self._set_user_state(user_id, InterviewState.QUESTIONING)
+
+                # 只返回分析結果，不包含面試問題
+                return f"""
+📊 **自我介紹分析結果**
+
+{result["result"]}
+
+---
+
+🎯 **分析完成！現在進入面試問答階段**
+
+我將為您提供面試問題，請認真回答。除非您說「退出」，否則我們會繼續下一題。
+                """
+            else:
+                return f"自我介紹分析失敗: {result.get('error', '未知錯誤')}"
+        except Exception as e:
+            return f"處理自我介紹分析失敗: {str(e)}"
+
+    def _process_completed_state(
+        self, user_message, system_prompt, interview_data=None
+    ):
+        """處理面試完成階段"""
+        try:
+            lower_message = user_message.lower()
+
+            # 檢查是否為重新開始的請求
+            restart_keywords = ["重新開始", "再來一次", "重新面試", "開始新的面試"]
+            if any(keyword in lower_message for keyword in restart_keywords):
+                # 重置狀態到等待階段
+                user_id = "default_user"
+                self._set_user_state(user_id, InterviewState.WAITING)
+                return """
+🔄 **重新開始面試**
+
+系統已重置，歡迎再次使用智能面試系統！
+
+請點擊「開始面試」或輸入「開始面試」來開始新的面試流程。
+                """
+
+            # 如果面試已經完成，不要重複生成總結
+            # 檢查是否是第一次進入完成階段（通過檢查用戶訊息是否為退出相關）
+            exit_keywords = ["退出", "結束", "完成", "不想繼續", "停止"]
+            if any(keyword in lower_message for keyword in exit_keywords):
+                # 第一次進入完成階段，生成總結
+                result = call_fast_agent_function(
+                    "generate_final_summary",
+                    user_message=user_message,
+                    interview_data=interview_data,
                 )
+                if result.get("success"):
+                    return f"""
+🎉 **面試完成！**
 
-                # 再獲取標準答案
-                standard_result = call_fast_agent_function("get_standard_answer")
+{result["result"]}
 
-                # 組合結果
-                if analysis_result.get("success") and standard_result.get("success"):
-                    combined_response = f"""
+---
+
+感謝您參與本次模擬面試！希望這次經驗對您的求職之路有所幫助。
+
+如需重新開始，請說「重新開始」。
+                    """
+                else:
+                    return f"""
+🎉 **面試完成！**
+
+感謝您參與本次智能面試系統的模擬面試！
+
+基於您的表現，我建議您：
+1. 繼續練習技術問題的表達
+2. 加強自我介紹的結構化
+3. 多進行模擬面試練習
+
+如需重新開始，請說「重新開始」。
+                    """
+            else:
+                # 面試已經完成，提示用戶選項
+                return """
+✅ **面試已完成**
+
+您的面試總結已經生成完畢。
+
+📋 您現在可以：
+- 說「重新開始」開始新的面試
+- 查看之前的面試總結
+
+如需重新開始面試，請說「重新開始」。
+                """
+
+        except Exception as e:
+            return f"處理面試完成階段失敗: {str(e)}"
+
+    def _get_first_question(self):
+        """獲取第一個面試問題"""
+        try:
+            result = call_fast_agent_function("get_question")
+            if result.get("success"):
+                return result["result"]
+            else:
+                return "第一題：請介紹一下您最熟悉的程式語言及其應用場景。"
+        except Exception as e:
+            return "無法獲取問題，請稍後再試。"
+
+    def _generate_state_controlled_mock_response(self, user_message, current_state):
+        """生成狀態控制的模擬回應"""
+        try:
+            print(f"🎭 生成狀態控制模擬回應 (狀態: {current_state.value})")
+
+            if current_state == InterviewState.INTRO:
+                return f"🎯 自我介紹階段：謝謝您的分享「{user_message}」。請繼續介紹或說「介紹完了」來開始面試。"
+            elif current_state == InterviewState.QUESTIONING:
+                # 檢查是否為請求題目
+                question_request_keywords = [
+                    "請給我問題",
+                    "想要問題",
+                    "需要問題",
+                    "可以給我問題",
+                    "提供問題",
+                    "出題",
+                    "測試",
+                    "開始面試",
+                    "開始練習",
+                ]
+                lower_message = user_message.lower()
+
+                if any(
+                    keyword in lower_message for keyword in question_request_keywords
+                ):
+                    return f"🎯 面試題目階段：這是一個模擬面試題目。請回答這個問題，我會給您評分和標準答案。"
+                else:
+                    return f"📝 面試回答階段：您說「{user_message}」。這是一個很好的回答！我會分析您的回答並給出評分。"
+            else:
+                return f"💬 一般回應：{user_message}"
+
+        except Exception as e:
+            return f"生成模擬回應失敗: {str(e)}"
+
+    def _process_with_fast_agent(self, user_message):
+        """使用 Fast Agent 處理用戶訊息 - 混合策略"""
+        try:
+            print(f"🔍 開始處理用戶訊息: '{user_message}'")
+
+            # 第一層：快速關鍵字匹配（低成本、高速度）
+            result = self._keyword_based_processing(user_message)
+            if result:
+                print(f"✅ 關鍵字匹配成功: {result[:50]}...")
+                return result
+
+            # 第二層：LLM 意圖識別（高理解能力）
+            result = self._llm_intent_processing(user_message)
+            if result:
+                print(f"🤖 LLM 意圖識別成功: {result[:50]}...")
+                return result
+
+            # 第三層：預設回應（兜底）
+            result = self._default_response(user_message)
+            print(f"💬 使用預設回應: {result[:50]}...")
+            return result
+
+        except Exception as e:
+            print(f"❌ 處理失敗: {e}")
+            return f"處理失敗: {str(e)}"
+
+    def _keyword_based_processing(self, user_message):
+        """關鍵字基礎處理 - 快速匹配"""
+        lower_message = user_message.lower()
+
+        # 檢查是否為獲取問題的請求（非常精確的匹配）
+        question_keywords = [
+            "請給我問題",
+            "想要問題",
+            "需要問題",
+            "可以給我問題",
+            "提供問題",
+            "出題",
+            "測試",
+        ]
+        if any(word in lower_message for word in question_keywords):
+            result = call_fast_agent_function("get_question")
+            if result.get("success"):
+                return result["result"]
+            else:
+                return f"獲取問題失敗: {result.get('error', '未知錯誤')}"
+
+        # 檢查是否為標準答案請求（非常精確的匹配）
+        standard_keywords = [
+            "請給我標準答案",
+            "想要標準答案",
+            "需要標準答案",
+            "提供標準答案",
+        ]
+        if any(word in lower_message for word in standard_keywords):
+            result = call_fast_agent_function("get_standard_answer")
+            if result.get("success"):
+                return result["result"]
+            else:
+                return f"獲取標準答案失敗: {result.get('error', '未知錯誤')}"
+
+        # 檢查是否為開始面試（非常精確的匹配）
+        start_keywords = ["開始面試", "開始練習", "開始測試", "準備開始", "可以開始了"]
+        if any(word in lower_message for word in start_keywords):
+            result = call_fast_agent_function("start_interview")
+            if result.get("success"):
+                return result["result"]
+            else:
+                return f"開始面試失敗: {result.get('error', '未知錯誤')}"
+
+        # 檢查是否為自我介紹（非常精確的匹配）
+        intro_keywords = [
+            "我叫",
+            "我是",
+            "我的名字",
+            "自我介紹",
+            "我的背景",
+            "我的經驗",
+            "我的學歷",
+            "我的工作",
+        ]
+        if any(word in lower_message for word in intro_keywords):
+            return f"""
+👋 很高興認識您！
+
+您的自我介紹：{user_message}
+
+這是一個很好的開始！現在我們可以開始正式的面試流程。
+
+請輸入「開始面試」或「問題」來獲取面試問題。
+            """
+
+        # 檢查是否為明確的面試回答（非常嚴格的條件）
+        answer_indicators = [
+            "我認為",
+            "我的看法",
+            "我的回答",
+            "我的答案",
+            "我的理解",
+            "根據我的經驗",
+            "我的做法",
+            "我的方法",
+            "我的策略",
+            "我的觀點",
+            "我的想法",
+            "我的見解",
+        ]
+
+        if len(user_message) > 80 and any(
+            word in lower_message for word in answer_indicators
+        ):
+            return self._analyze_interview_answer(user_message)
+
+        # 檢查是否為一般對話（非常精確的匹配）
+        chat_keywords = [
+            "謝謝",
+            "感謝",
+            "再見",
+            "拜拜",
+            "好的",
+            "了解",
+            "明白",
+            "知道了",
+            "沒問題",
+            "可以",
+            "行",
+            "ok",
+            "okay",
+            "嗯",
+            "是的",
+        ]
+        if any(word in lower_message for word in chat_keywords):
+            return self._handle_general_chat(user_message)
+
+        # 如果沒有匹配到任何關鍵字，返回 None 讓下一層處理
+        return None
+
+    def _llm_intent_processing(self, user_message):
+        """LLM 意圖識別處理 - 高理解能力"""
+        try:
+            # 只有在 FAST_AGENT_AVAILABLE 時才使用 LLM
+            if not FAST_AGENT_AVAILABLE:
+                return None
+
+            # 使用真正的 LLM 意圖識別
+            intent = self._llm_based_intent_recognition(user_message)
+            print(f"🤖 LLM 識別到意圖: {intent}")
+
+            if intent == "get_question":
+                result = call_fast_agent_function("get_question")
+                return result.get("result") if result.get("success") else None
+            elif intent == "analyze_answer":
+                return self._analyze_interview_answer(user_message)
+            elif intent == "get_standard_answer":
+                result = call_fast_agent_function("get_standard_answer")
+                return result.get("result") if result.get("success") else None
+            elif intent == "start_interview":
+                result = call_fast_agent_function("start_interview")
+                return result.get("result") if result.get("success") else None
+            elif intent == "introduction":
+                return f"""
+👋 很高興認識您！
+
+您的自我介紹：{user_message}
+
+這是一個很好的開始！現在我們可以開始正式的面試流程。
+
+請輸入「開始面試」或「問題」來獲取面試問題。
+                """
+            elif intent == "general_chat":
+                return self._handle_general_chat(user_message)
+
+        except Exception as e:
+            print(f"❌ LLM 意圖識別失敗: {e}")
+            return None
+
+    def _llm_based_intent_recognition(self, user_message):
+        """使用 LLM 進行真正的意圖識別"""
+        try:
+            # 導入 OpenAI
+            import os
+
+            import openai
+            from openai import OpenAI
+
+            api_key = os.getenv("OPENAI_API_KEY")
+            if not api_key:
+                print("⚠️ OPENAI_API_KEY 未設定，回退到規則匹配")
+                return self._smart_intent_recognition(user_message)
+
+            client = OpenAI(api_key=api_key)
+
+            # 構建 LLM 意圖識別提示詞
+            prompt = f"""
+請分析以下用戶輸入的意圖，並返回對應的意圖類型：
+
+用戶輸入：{user_message}
+
+可能的意圖類型：
+1. "get_question" - 用戶想要獲取面試問題
+2. "analyze_answer" - 用戶正在回答面試問題
+3. "get_standard_answer" - 用戶想要查看標準答案
+4. "start_interview" - 用戶想要開始面試
+5. "introduction" - 用戶在做自我介紹
+6. "general_chat" - 一般對話或問候
+
+請只返回意圖類型名稱，不要添加任何其他文字。
+            """
+
+            response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {
+                        "role": "system",
+                        "content": "您是一個意圖識別專家，負責分析用戶輸入的意圖。請準確識別用戶想要執行的操作。",
+                    },
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.1,
+                max_tokens=50,
+            )
+
+            intent = response.choices[0].message.content.strip().lower()
+            print(f"🔍 LLM 識別結果: {intent}")
+
+            # 驗證意圖是否有效
+            valid_intents = [
+                "get_question",
+                "analyze_answer",
+                "get_standard_answer",
+                "start_interview",
+                "introduction",
+                "general_chat",
+            ]
+
+            if intent and intent in valid_intents:
+                return intent
+            else:
+                print(f"⚠️ LLM 返回無效意圖: {intent}，回退到規則匹配")
+                return self._smart_intent_recognition(user_message)
+
+        except Exception as e:
+            print(f"❌ LLM 意圖識別失敗: {e}，回退到規則匹配")
+            return self._smart_intent_recognition(user_message)
+
+    def _smart_intent_recognition(self, user_message):
+        """智能意圖識別 - 結合規則和語義分析"""
+        lower_message = user_message.lower()
+
+        # 1. 問題相關意圖
+        question_patterns = [
+            "問題",
+            "題目",
+            "面試",
+            "問",
+            "考",
+            "請給我",
+            "想要",
+            "需要",
+            "可以給我",
+            "提供",
+            "出題",
+            "測試",
+        ]
+        if any(pattern in lower_message for pattern in question_patterns):
+            return "get_question"
+
+        # 2. 答案分析相關意圖
+        answer_patterns = [
+            "我認為",
+            "我的看法",
+            "我的回答",
+            "我的答案",
+            "我的理解",
+            "根據我的經驗",
+            "我的做法",
+            "我的方法",
+            "我的策略",
+            "我的觀點",
+            "我的想法",
+            "我的見解",
+        ]
+        if any(pattern in lower_message for pattern in answer_patterns):
+            return "analyze_answer"
+
+        # 3. 標準答案相關意圖
+        standard_patterns = [
+            "標準",
+            "答案",
+            "解釋",
+            "正確",
+            "參考",
+            "對照",
+            "標準答案",
+            "正確答案",
+            "參考答案",
+        ]
+        if any(pattern in lower_message for pattern in standard_patterns):
+            return "get_standard_answer"
+
+        # 4. 開始面試意圖
+        start_patterns = [
+            "開始",
+            "start",
+            "開始面試",
+            "準備",
+            "準備好",
+            "可以開始",
+            "開始吧",
+            "開始練習",
+            "開始測試",
+        ]
+        if any(pattern in lower_message for pattern in start_patterns):
+            return "start_interview"
+
+        # 5. 自我介紹意圖
+        intro_patterns = [
+            "我叫",
+            "我是",
+            "我的名字",
+            "自我介紹",
+            "介紹",
+            "背景",
+            "經歷",
+            "你好",
+            "hello",
+            "hi",
+            "您好",
+            "初次見面",
+            "認識",
+        ]
+        if any(pattern in lower_message for pattern in intro_patterns):
+            return "introduction"
+
+        # 6. 一般對話意圖
+        chat_patterns = [
+            "謝謝",
+            "感謝",
+            "再見",
+            "拜拜",
+            "好的",
+            "了解",
+            "明白",
+            "知道了",
+            "沒問題",
+            "可以",
+            "行",
+            "ok",
+            "okay",
+        ]
+        if any(pattern in lower_message for pattern in chat_patterns):
+            return "general_chat"
+
+        # 7. 根據內容長度和結構判斷
+        if len(user_message) > 20 and any(
+            word in lower_message for word in ["我", "我的", "我們"]
+        ):
+            # 較長的包含第一人稱的內容，可能是面試回答
+            return "analyze_answer"
+
+        # 8. 預設為一般對話
+        return "general_chat"
+
+    def _analyze_interview_answer(self, user_message):
+        """分析面試答案"""
+        analysis_result = call_fast_agent_function(
+            "analyze_answer",
+            user_answer=user_message,
+            question="面試問題",
+            standard_answer="標準答案",
+        )
+
+        standard_result = call_fast_agent_function("get_standard_answer")
+
+        if analysis_result.get("success") and standard_result.get("success"):
+            combined_response = f"""
 {analysis_result["result"]}
 
 ============================================================
 {standard_result["result"]}
-                    """
-                    return combined_response
-                elif analysis_result.get("success"):
-                    return analysis_result["result"]
-                elif standard_result.get("success"):
-                    return standard_result["result"]
-                else:
-                    return f"分析失敗: {analysis_result.get('error', '未知錯誤')}"
+            """
+            return combined_response
+        elif analysis_result.get("success"):
+            return analysis_result["result"]
+        elif standard_result.get("success"):
+            return standard_result["result"]
+        else:
+            return f"分析失敗: {analysis_result.get('error', '未知錯誤')}"
 
-        except Exception as e:
-            return f"Fast Agent 處理失敗: {str(e)}"
+    def _handle_general_chat(self, user_message):
+        """處理一般對話"""
+        return f"""
+💬 我理解您的輸入：{user_message}
+
+如果您想要：
+- 開始面試：請輸入「開始面試」或「問題」
+- 回答面試問題：請明確說明您的答案
+- 查看標準答案：請輸入「標準答案」
+
+請告訴我您希望進行哪種操作？
+        """
+
+    def _default_response(self, user_message):
+        """預設回應"""
+        return f"""
+💬 我理解您的輸入：{user_message}
+
+這看起來像是一般對話或自我介紹。如果您想要：
+- 開始面試：請輸入「開始面試」或「問題」
+- 回答面試問題：請明確說明您的答案
+- 查看標準答案：請輸入「標準答案」
+
+請告訴我您希望進行哪種操作？
+        """
 
     def _generate_mock_response(self, user_message):
         """生成AI回應 - 優先使用 SmartAgent，回退到 MCP 工具"""
@@ -933,6 +1927,12 @@ def index():
 def resume():
     """履歷輸入頁面"""
     return render_template("resume.html")
+
+
+@app.route("/test")
+def test():
+    """面試系統測試頁面"""
+    return render_template("browser_test.html")
 
 
 if __name__ == "__main__":
