@@ -246,4 +246,37 @@ def search_jobs_by_resume_tool(resume_data: Dict[str, Any], query: str = "") -> 
             "message": str(e)
         }
 
+def recommend_jobs_tool(resume_id: str, top_k: int = 5) -> Dict[str, Any]:
+    """MCP 工具：根據履歷 ID 推薦職缺"""
+    try:
+        # 從 MongoDB 獲取履歷資料
+        from backend.tools.resume_manager import resume_manager
+        resume_data = resume_manager.get_resume_by_user_id(resume_id)
+        
+        if not resume_data:
+            return {
+                "status": "not_found",
+                "message": f"未找到履歷 ID: {resume_id}"
+            }
+        
+        # 根據履歷推薦職缺
+        jobs = job_search_tool.search_jobs_by_resume(resume_data)
+        
+        # 限制推薦數量
+        recommended_jobs = jobs[:top_k]
+        
+        return {
+            "status": "success",
+            "resume_id": resume_id,
+            "recommended_jobs": recommended_jobs,
+            "count": len(recommended_jobs),
+            "message": f"為履歷 {resume_id} 推薦了 {len(recommended_jobs)} 個職缺"
+        }
+        
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"職缺推薦失敗: {str(e)}"
+        }
+
 

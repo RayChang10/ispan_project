@@ -34,9 +34,37 @@ from backend.tools.ocr import (
 # MongoDB 履歷管理
 from backend.tools.resume_manager import resume_manager
 
+# MCP Resources 和 Events
+from backend.mcp_resources import (
+    get_resume_resource,
+    get_job_embeddings_resource, 
+    list_resume_resources
+)
+from backend.mcp_events import (
+    emit_interview_start_event,
+    emit_interview_answer_event,
+    emit_interview_end_event,
+    get_interview_events,
+    emit_system_event,
+    get_global_events
+)
+
+# SQL/RAG 工具
+from backend.sql_rag_tool import (
+    query_sql,
+    get_database_schema,
+    rag_search_jobs
+)
+
+# 多模態工具
+from backend.multimodal_tool import (
+    transcribe_audio,
+    analyze_resume_layout
+)
+
 # 職缺搜尋和履歷分析工具（可選導入）
 try:
-    from backend.tools.job_search_tool import job_search_tool, search_jobs_tool, search_jobs_by_resume_tool
+    from backend.tools.job_search_tool import job_search_tool, search_jobs_tool, search_jobs_by_resume_tool, recommend_jobs_tool
     from backend.tools.resume_analysis_tool import resume_analysis_tool, analyze_resume_job_fit_tool, resume_health_check_tool
     JOB_SEARCH_AVAILABLE = True
 except ImportError:
@@ -586,6 +614,16 @@ def search_jobs_by_resume(resume_data: dict, query: str = "") -> dict:
         return {"status": "error", "message": f"履歷職缺搜尋失敗: {str(e)}"}
 
 
+@mcp.tool()
+def recommend_jobs(resume_id: str, top_k: int = 5) -> dict:
+    """根據履歷 ID 推薦職缺"""
+    try:
+        result = recommend_jobs_tool(resume_id, top_k)
+        return result
+    except Exception as e:
+        return {"status": "error", "message": f"職缺推薦失敗: {str(e)}"}
+
+
 # ==================== 履歷分析工具 ====================
 
 @mcp.tool()
@@ -607,6 +645,109 @@ def resume_health_check(resume_data: dict, target_job: dict = None) -> dict:
     except Exception as e:
         return {"status": "error", "message": f"履歷健檢失敗: {str(e)}"}
 
+
+# ==================== MCP Resources ====================
+
+@mcp.resource("resume/{resume_id}")
+def get_resume_resource_tool(resume_id: str) -> dict:
+    """MCP Resource: 獲取履歷資源 (resource://resume/{id})"""
+    return get_resume_resource(resume_id, "parsed")
+
+@mcp.resource("resume/{resume_id}/parsed") 
+def get_resume_parsed_resource_tool(resume_id: str) -> dict:
+    """MCP Resource: 獲取解析後的履歷資源 (resource://resume/{id}/parsed)"""
+    return get_resume_resource(resume_id, "parsed")
+
+@mcp.resource("resume/{resume_id}/raw")
+def get_resume_raw_resource_tool(resume_id: str) -> dict:
+    """MCP Resource: 獲取原始履歷檔案 (resource://resume/{id}/raw)"""
+    return get_resume_resource(resume_id, "raw")
+
+@mcp.resource("db/job_embeddings")
+def get_job_embeddings_resource_tool() -> dict:
+    """MCP Resource: 獲取職缺嵌入向量資源 (resource://db/job_embeddings)"""
+    return get_job_embeddings_resource()
+
+# ==================== MCP Events ====================
+
+@mcp.tool()
+def emit_interview_start_event_tool(session_id: str, interview_data: dict = None) -> dict:
+    """MCP Event: 發出面試開始事件 (event://interview/start)"""
+    return emit_interview_start_event(session_id, interview_data)
+
+@mcp.tool()
+def emit_interview_answer_event_tool(session_id: str, answer_data: dict = None) -> dict:
+    """MCP Event: 發出面試回答事件 (event://interview/answer)"""
+    return emit_interview_answer_event(session_id, answer_data)
+
+@mcp.tool()
+def emit_interview_end_event_tool(session_id: str, end_data: dict = None) -> dict:
+    """MCP Event: 發出面試結束事件 (event://interview/end)"""
+    return emit_interview_end_event(session_id, end_data)
+
+@mcp.tool()
+def get_interview_events_tool(session_id: str, event_type: str = None) -> dict:
+    """MCP Event: 獲取面試事件"""
+    return get_interview_events(session_id, event_type)
+
+@mcp.tool()
+def emit_system_event_tool(event_type: str, data: dict = None) -> dict:
+    """MCP Event: 發出系統事件"""
+    return emit_system_event(event_type, data)
+
+@mcp.tool()
+def get_global_events_tool(limit: int = 50) -> dict:
+    """MCP Event: 獲取全域事件"""
+    return get_global_events(limit)
+
+# ==================== SQL/RAG 工具 ====================
+
+@mcp.tool()
+def query_sql_tool(sql_query: str, limit: int = 100) -> dict:
+    """MCP 工具：執行安全的 SQL 查詢（只讀白名單）"""
+    try:
+        result = query_sql(sql_query, limit)
+        return result
+    except Exception as e:
+        return {"status": "error", "message": f"SQL 查詢失敗: {str(e)}"}
+
+@mcp.tool()
+def get_database_schema_tool() -> dict:
+    """MCP 工具：獲取資料庫結構資訊"""
+    try:
+        result = get_database_schema()
+        return result
+    except Exception as e:
+        return {"status": "error", "message": f"獲取資料庫結構失敗: {str(e)}"}
+
+@mcp.tool()
+def rag_search_jobs_tool(query: str, top_k: int = 10) -> dict:
+    """MCP 工具：使用 RAG 搜尋職缺嵌入向量"""
+    try:
+        result = rag_search_jobs(query, top_k)
+        return result
+    except Exception as e:
+        return {"status": "error", "message": f"RAG 搜尋失敗: {str(e)}"}
+
+# ==================== 多模態工具 ====================
+
+@mcp.tool()
+def transcribe_audio_tool(file_path: str, language: str = "zh") -> dict:
+    """MCP 工具：語音轉文字 (transcribe_audio)"""
+    try:
+        result = transcribe_audio(file_path, language)
+        return result
+    except Exception as e:
+        return {"status": "error", "message": f"語音轉文字失敗: {str(e)}"}
+
+@mcp.tool()
+def analyze_resume_layout_tool(file_path: str) -> dict:
+    """MCP 工具：分析履歷佈局 (analyze_resume_layout)"""
+    try:
+        result = analyze_resume_layout(file_path)
+        return result
+    except Exception as e:
+        return {"status": "error", "message": f"履歷佈局分析失敗: {str(e)}"}
 
 # ==================== 整合功能工具 ====================
 
