@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>JobMate360 | 首頁</title>
+    <link rel="icon" type="image/png" href="/favicon.ico" />
+    <link rel="stylesheet" href="assets/css/styles.css" />
+</head>
+
+<body>
+    <div class="container">
+        <header class="header">
+            <div>
+                <div class="kicker">JobMate360</div>
+                <h1>你的虛擬面試顧問</h1>
+            </div>
+            <div class="badge">前端原型</div>
+        </header>
+
+        <section class="card hero">
+            <h2>歡迎使用 JobMate360</h2>
+            <p class="muted">提供職缺媒合、履歷健檢與虛擬面試的一站式體驗。<br>開始前，請先填寫或上傳你的履歷，以利後續媒合與分析。</p>
+            <div class="actions" style="justify-content:center;">
+                <button class="button primary" id="btnFill">填寫履歷</button>
+                <button class="button secondary" id="btnUpload">上傳履歷</button>
+            </div>
+        </section>
+
+
+    </div>
+    <script src="assets/js/common.js"></script>
+    <script>
+        const api = window.JobMate;
+        const authed = api.Auth.isAuthed();
+        function go(target) {
+            // 強制跳轉到履歷選擇頁面
+            const next = 'app/resume-choice.html';
+            console.log('首頁按鈕點擊，將跳轉到:', next);
+            if (authed) api.navigate(next); else api.navigate('auth/login.html?redirect=' + encodeURIComponent('app/resume-choice.html'));
+        }
+        document.getElementById('btnFill').addEventListener('click', () => go('app/resume-choice.html'));
+        document.getElementById('btnUpload').addEventListener('click', () => go('app/resume-choice.html'));
+    </script>
+</body>
+
+</html>

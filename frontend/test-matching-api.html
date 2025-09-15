@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="zh-Hant-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>職缺搜尋 API 測試</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .test-section { margin: 20px 0; padding: 15px; border: 1px solid #ddd; }
+        .result { margin: 10px 0; padding: 10px; background: #f5f5f5; }
+        button { padding: 10px 20px; margin: 5px; }
+        input { padding: 8px; width: 300px; }
+    </style>
+</head>
+<body>
+    <h1>職缺搜尋 API 測試</h1>
+    
+    <div class="test-section">
+        <h3>1. 測試 API 連接</h3>
+        <button onclick="testApiConnection()">測試 API 連接</button>
+        <div id="api-connection-result" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>2. 測試職缺搜尋</h3>
+        <input type="text" id="search-query" placeholder="輸入搜尋關鍵字，例如：Python 工程師" value="Python 工程師">
+        <button onclick="testJobSearch()">搜尋職缺</button>
+        <div id="job-search-result" class="result"></div>
+    </div>
+    
+    <div class="test-section">
+        <h3>3. 測試前端 API 模組</h3>
+        <button onclick="testFrontendApi()">測試前端 API 模組</button>
+        <div id="frontend-api-result" class="result"></div>
+    </div>
+
+    <script>
+        // 載入前端 API 模組
+        const script = document.createElement('script');
+        script.src = 'assets/js/api.js';
+        document.head.appendChild(script);
+        
+        script.onload = function() {
+            console.log('API 模組已載入');
+        };
+
+        async function testApiConnection() {
+            const resultDiv = document.getElementById('api-connection-result');
+            resultDiv.innerHTML = '測試中...';
+            
+            try {
+                const response = await fetch('http://localhost:8001/health');
+                const data = await response.json();
+                resultDiv.innerHTML = `<strong>✅ API 連接成功</strong><br>回應: ${JSON.stringify(data)}`;
+            } catch (error) {
+                resultDiv.innerHTML = `<strong>❌ API 連接失敗</strong><br>錯誤: ${error.message}`;
+            }
+        }
+
+        async function testJobSearch() {
+            const resultDiv = document.getElementById('job-search-result');
+            const query = document.getElementById('search-query').value;
+            resultDiv.innerHTML = '搜尋中...';
+            
+            try {
+                const response = await fetch('http://localhost:8001/api/job_search/search', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ query, top_k: 3 })
+                });
+                
+                const data = await response.json();
+                resultDiv.innerHTML = `
+                    <strong>✅ 搜尋成功</strong><br>
+                    狀態: ${data.status}<br>
+                    職缺數: ${data.count}<br>
+                    職缺列表:<br>
+                    ${data.jobs ? data.jobs.map((job, i) => 
+                        `${i+1}. ${job.job_title} - ${job.company_name}`
+                    ).join('<br>') : '無職缺'}
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `<strong>❌ 搜尋失敗</strong><br>錯誤: ${error.message}`;
+            }
+        }
+
+        async function testFrontendApi() {
+            const resultDiv = document.getElementById('frontend-api-result');
+            resultDiv.innerHTML = '測試中...';
+            
+            try {
+                // 等待 API 模組載入
+                if (typeof window.JobMateAPI === 'undefined') {
+                    resultDiv.innerHTML = '<strong>❌ API 模組未載入</strong>';
+                    return;
+                }
+                
+                const query = document.getElementById('search-query').value;
+                const result = await window.JobMateAPI.JobSearch.searchJobs(query, 3);
+                
+                resultDiv.innerHTML = `
+                    <strong>✅ 前端 API 模組測試成功</strong><br>
+                    狀態: ${result.status}<br>
+                    職缺數: ${result.count}<br>
+                    職缺列表:<br>
+                    ${result.jobs ? result.jobs.map((job, i) => 
+                        `${i+1}. ${job.job_title} - ${job.company_name}`
+                    ).join('<br>') : '無職缺'}
+                `;
+            } catch (error) {
+                resultDiv.innerHTML = `<strong>❌ 前端 API 模組測試失敗</strong><br>錯誤: ${error.message}`;
+            }
+        }
+    </script>
+</body>
+</html>

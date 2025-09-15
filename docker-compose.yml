@@ -1,0 +1,180 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fastmcp-fastagent-api
+    env_file:
+      - .env
+    environment:
+      # FastAPI 對外 URL（供 http_wrapper 轉發時使用）
+      - FASTAPI_URL=http://api:8001
+      # MinIO 連線參數（也可透過 .env 覆蓋）
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - MINIO_SECURE=false
+      - MINIO_BUCKET=fastagent-users
+      # 資料庫與快取
+      - DATABASE_URL=postgresql+psycopg://fastagent:fastagent@postgres:5432/fastagent
+      - REDIS_URL=redis://redis:6379/0
+    # volumes: []
+    ports:
+      - "8001:8001"
+    depends_on:
+      - minio
+      - postgres
+      - redis
+
+  main:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fastmcp-main
+    env_file:
+      - .env
+    environment:
+      - FASTAPI_URL=http://127.0.0.1:5000
+      - DATABASE_URL=postgresql+psycopg://fastagent:fastagent@postgres:5432/fastagent
+      - MONGODB_URI=mongodb://admin:changeme@mongo:27017/?authSource=admin
+      - MONGODB_DB_NAME=interview_db
+      - REDIS_URL=redis://redis:6379/0
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=minioadmin
+      - MINIO_SECRET_KEY=minioadmin
+      - MINIO_SECURE=false
+      - MINIO_BUCKET=fastagent-users
+      - MILVUS_HOST=milvus
+      - MILVUS_PORT=19530
+    volumes:
+      # 掛載程式碼目錄，讓容器能即時看到你的修改
+      - ./backend:/app/backend
+      - ./frontend:/app/frontend
+      - ./Livetalking_virtual_interview:/app/Livetalking_virtual_interview
+      - ./Livetalking_virtual_interview:/app/Livetalking_virtual_interview
+    depends_on:
+      - postgres
+      - redis
+      - minio
+      - mongo
+      - milvus
+    command: bash -lc "python -m backend.main --mode integrated"
+    ports:
+      - "8080:8080"
+      - "5000:5000"
+
+  minio:
+    image: quay.io/minio/minio:RELEASE.2024-12-13T22-19-12Z
+    container_name: fastmcp-minio
+    command: server /data --console-address ":9001"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000" # S3 API
+      - "9001:9001" # Web Console
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: fastmcp-postgres
+    environment:
+      - POSTGRES_USER=fastagent
+      - POSTGRES_PASSWORD=fastagent
+      - POSTGRES_DB=fastagent
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7-alpine
+    container_name: fastmcp-redis
+    command: redis-server --save 60 1000 --loglevel warning
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  mongo:
+    image: mongo:7.0
+    container_name: fastmcp-mongo
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=changeme
+    volumes:
+      - mongo_data:/data/db
+    ports:
+      - "27017:27017" # MongoDB 默認埠
+    restart: unless-stopped
+
+  milvus:
+    image: milvusdb/milvus:v2.3.3
+    container_name: fastmcp-milvus
+    command: [ "milvus", "run", "standalone" ]
+    environment:
+      ETCD_USE_EMBED: "true"
+      ETCD_DATA_DIR: "/var/lib/milvus/etcd"
+      MILVUS_DATA_DIR: "/var/lib/milvus/data"
+      COMMON_STORAGETYPE: "local"
+      ETCD_USE_EMBEDDED: "true"
+    volumes:
+      - milvus_data:/var/lib/milvus
+    ports:
+      - "19530:19530" # Milvus API
+      - "9092:9091" # Milvus metrics (修改端口避免衝突)
+    restart: unless-stopped
+    # LiveTalking 完整版 (需要 GPU)
+  livetalking:
+    build:
+      context: .
+      dockerfile: Dockerfile.livetalking
+    container_name: fastmcp-livetalking
+    # 使用 host 網路模式來解決 WebRTC ICE 連接問題
+    network_mode: host
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - LIVETALKING_MODE=webrtc
+      - LIVETALKING_MODEL=wav2lip
+      - LIVETALKING_AVATAR_ID=wav2lip256_avatar1
+      - LIVETALKING_PORT=8010
+      - HF_ENDPOINT=https://hf-mirror.com
+    volumes:
+      # 掛載模型和資料目錄
+      - ./Livetalking_virtual_interview:/app/Livetalking_virtual_interview
+      - ./models:/app/models
+      - ./data:/app/data
+      # 掛載前端檔案
+      - ./frontend:/app/frontend
+      # 掛載 logs 目錄
+      - ./logs:/app/logs
+    # host 網路模式下不需要 ports 映射
+    # ports:
+    #   - "8010:8010" # LiveTalking WebRTC 服務
+    #   - "1985:1985" # SRS 媒體服務器
+    # 在 WSL 環境中暫時註解 GPU 部署配置
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - capabilities: [ gpu ]
+    restart: unless-stopped
+    # 如果沒有 GPU，可以註解掉 deploy 和 environment 部分
+    # 並且修改 whisper-api/api.py 中的 GPU 檢查邏輯
+
+
+
+volumes:
+  minio_data:
+    driver: local
+  pg_data:
+    driver: local
+  redis_data:
+    driver: local
+  mongo_data:
+    driver: local
+  milvus_data:
+    driver: local
+  livetalking_models:
+    driver: local
+  livetalking_avatars:
+    driver: local

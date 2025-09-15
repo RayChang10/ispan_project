@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>註冊 | JobMate360</title>
+	<link rel="stylesheet" href="../assets/css/styles.css" />
+</head>
+
+<body>
+	<div class="container" id="root">
+		<div class="center-screen">
+			<section class="card" style="max-width:700px; width:100%;">
+				<h2>註冊</h2>
+				<div class="grid-1">
+					<div>
+						<label class="label">帳號（Email）<span class="badge">必填</span></label>
+						<input id="email" class="input" type="email" maxlength="64" />
+					</div>
+					<div>
+						<label class="label">姓名<span class="badge">必填</span></label>
+						<input id="name" class="input" type="text" maxlength="50" />
+					</div>
+					<div>
+						<label class="label">密碼<span class="badge">必填</span></label>
+						<input id="password" class="input" type="password" maxlength="64" />
+					</div>
+					<div>
+						<label class="label">再次輸入密碼<span class="badge">必填</span></label>
+						<input id="password2" class="input" type="password" maxlength="64" />
+					</div>
+				</div>
+				<div class="actions">
+					<button class="button primary" id="registerBtn">註冊</button>
+					<a class="button secondary" href="login.html">返回登入</a>
+				</div>
+				<div class="help" id="msg"></div>
+			</section>
+		</div>
+	</div>
+	<script src="../assets/js/common.js"></script>
+	<script src="../assets/js/auth-register.js"></script>
+</body>
+
+</html>

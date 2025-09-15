@@ -1,0 +1,76 @@
+# LiveTalking 虛擬人 Docker 映像檔
+FROM nvidia/cuda:11.8.0-devel-ubuntu20.04
+
+# 避免交互式安裝
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV PIP_NO_CACHE_DIR=1
+
+# 設定工作目錄
+WORKDIR /app
+
+# 安裝系統依賴
+RUN apt-get update && apt-get install -y \
+    software-properties-common \
+    && add-apt-repository ppa:deadsnakes/ppa \
+    && apt-get update && apt-get install -y \
+    python3.10 \
+    python3.10-dev \
+    python3.10-distutils \
+    python3-pip \
+    git \
+    wget \
+    curl \
+    unzip \
+    build-essential \
+    cmake \
+    pkg-config \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgomp1 \
+    libgoogle-perftools-dev \
+    ffmpeg \
+    libavcodec-dev \
+    libavformat-dev \
+    libavutil-dev \
+    libswscale-dev \
+    libswresample-dev \
+    libavdevice-dev \
+    libasound2-dev \
+    portaudio19-dev \
+    ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# 設定 Python 別名和升級 pip
+RUN ln -sf /usr/bin/python3.10 /usr/bin/python \
+    && ln -sf /usr/bin/python3.10 /usr/bin/python3 \
+    && curl -sS https://bootstrap.pypa.io/get-pip.py | python3.10
+
+# 安裝 PyTorch (CUDA 11.8 版本)
+RUN pip install torch==2.0.0+cu118 torchvision==0.15.1+cu118 torchaudio==2.0.1+cu118 --index-url https://download.pytorch.org/whl/cu118
+
+# 複製並安裝 Python 依賴
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 複製 LiveTalking 程式碼
+COPY livetalking/ ./livetalking/
+
+# 複製專案程式碼
+COPY . .
+
+# 設定模型目錄
+RUN mkdir -p models data/avatars
+
+# 設定 HuggingFace 鏡像（避免網路問題）
+ENV HF_ENDPOINT=https://hf-mirror.com
+
+# 暴露端口
+EXPOSE 8010 8080 1985
+
+# 預設啟動命令
+CMD ["python", "livetalking/app.py", "--host", "0.0.0.0", "--port", "8010"]

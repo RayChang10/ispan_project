@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>安全與隱私 | JobMate360</title>
+    <link rel="stylesheet" href="../assets/css/styles.css" />
+</head>
+
+<body>
+    <div class="container" id="root">
+        <section class="card" style="max-width:720px; margin:24px auto;">
+            <h2>變更密碼</h2>
+            <div class="grid">
+                <div><label class="label">舊密碼</label><input id="old" class="input" type="password" /></div>
+                <div><label class="label">新密碼</label><input id="new1" class="input" type="password" /></div>
+                <div><label class="label">再次輸入新密碼</label><input id="new2" class="input" type="password" /></div>
+            </div>
+            <div class="actions"><button class="button primary" id="change">變更密碼</button></div>
+        </section>
+        <section class="card" style="max-width:720px; margin:24px auto;">
+            <h2>匿名化／刪除帳號</h2>
+            <p class="muted">此為高風險操作，將刪除你的帳號。請輸入 DELETE 以確認。</p>
+            <input id="confirmDel" class="input" placeholder="輸入 DELETE 以繼續" />
+            <div class="actions"><button class="button danger" id="delete">刪除帳號</button></div>
+        </section>
+    </div>
+    <script src="../assets/js/common.js"></script>
+    <script src="../assets/js/me-security.js"></script>
+</body>
+
+</html>

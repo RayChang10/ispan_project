@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>JobMate360 | 履歷健檢</title>
+	<link rel="stylesheet" href="../assets/css/styles.css" />
+</head>
+
+<body>
+	<div class="container">
+		<header class="header">
+			<h1>履歷健檢</h1>
+			<span class="badge">步驟 2 / 3</span>
+		</header>
+
+		<section class="card">
+			<p class="muted">此頁面以履歷填寫為模板，可直接修改資料；每個欄位下方皆顯示 AI 評語；底部提供整體分數與建議。</p>
+		</section>
+
+		<section class="card">
+			<h2>基本資料（健檢）</h2>
+			<div class="grid">
+				<div>
+					<label class="label">姓名<span class="badge">必填</span></label>
+					<input id="name" class="input" type="text" required />
+					<div class="help" id="ai_name">AI：姓名格式良好</div>
+				</div>
+				<div>
+					<label class="label">年齡<span class="badge">必填</span></label>
+					<input id="age" class="input" type="number" min="0" required />
+					<div class="help" id="ai_age">AI：年齡資訊清楚</div>
+				</div>
+				<div>
+					<label class="label">居住地<span class="badge">必填</span></label>
+					<select id="location" class="input" required>
+						<option value="">請選擇</option>
+						<option>台北市</option>
+						<option>新北市</option>
+						<option>桃園市</option>
+						<option>台中市</option>
+						<option>台南市</option>
+						<option>高雄市</option>
+						<option value="other">其他</option>
+					</select>
+					<input id="locationOther" class="input hidden" type="text" placeholder="請輸入居住地" />
+					<div class="help" id="ai_location">AI：地點與目標職缺區域是否一致？</div>
+				</div>
+				<div class="col">
+					<label class="label">簡介（上限1000字）<span class="badge">必填</span></label>
+					<textarea id="summary" maxlength="1000" required></textarea>
+					<div class="help"><span id="summaryCount">0</span> / 1000</div>
+					<div class="help" id="ai_summary">AI：建議補充量化成果（如提升效能 30%）。</div>
+				</div>
+				<div class="col">
+					<label class="label">關鍵字</label>
+					<div class="input-row">
+						<input id="keywordInput" class="input" type="text" placeholder="輸入關鍵字後按新增" />
+						<button class="button secondary" id="addKeyword">新增</button>
+					</div>
+					<div id="keywordList" class="actions" style="margin-top:8px;"></div>
+					<div class="help" id="ai_keywords">AI：關鍵字應涵蓋技能、框架、領域與工具。</div>
+				</div>
+			</div>
+		</section>
+
+		<section class="card">
+			<h2>期望工作資訊（健檢）</h2>
+			<div class="grid">
+				<div>
+					<label class="label">期望工作領域<span class="badge">必填</span></label>
+					<select id="expDomain" class="input" required>
+						<option value="">請選擇</option>
+						<option>軟體工程</option>
+						<option>資料科學</option>
+						<option>產品/專案</option>
+						<option value="other">其他</option>
+					</select>
+					<input id="expDomainOther" class="input hidden" type="text" placeholder="請輸入領域" />
+					<div class="help" id="ai_expDomain">AI：領域與既有經驗是否匹配？</div>
+				</div>
+				<div>
+					<label class="label">期望工作地點<span class="badge">必填</span></label>
+					<select id="expLocation" class="input" required>
+						<option value="">請選擇</option>
+						<option>台北市</option>
+						<option>新北市</option>
+						<option>新竹市</option>
+						<option>台中市</option>
+						<option>台南市</option>
+						<option>高雄市</option>
+						<option value="other">其他</option>
+					</select>
+					<input id="expLocationOther" class="input hidden" type="text" placeholder="請輸入地點" />
+					<div class="help" id="ai_expLocation">AI：與居住地或通勤條件是否合理？</div>
+				</div>
+				<div>
+					<label class="label">是否遠端<span class="badge">必填</span></label>
+					<div>
+						<label><input type="radio" name="remote" value="yes" required> 是</label>
+						<label style="margin-left:12px;"><input type="radio" name="remote" value="no"> 否</label>
+						<label style="margin-left:12px;"><input type="radio" name="remote" value="any"> 皆可</label>
+					</div>
+				</div>
+			</div>
+		</section>
+
+		<section class="card" id="workSection">
+			<div class="section-header">
+				<h2>工作經歷（健檢）</h2>
+				<button class="button secondary" id="addWork">新增一筆</button>
+			</div>
+			<div id="workList"></div>
+		</section>
+
+		<section class="card" id="eduSection">
+			<div class="section-header">
+				<h2>教育背景（健檢）</h2>
+				<button class="button secondary" id="addEdu">新增一筆</button>
+			</div>
+			<div id="eduList"></div>
+		</section>
+
+		<section class="card" id="skillSection">
+			<div class="section-header">
+				<h2>技能（健檢）</h2>
+				<button class="button secondary" id="addSkill">新增一筆</button>
+			</div>
+			<div id="skillList"></div>
+		</section>
+
+		<section class="card" id="projSection">
+			<div class="section-header">
+				<h2>專案（健檢）</h2>
+				<button class="button secondary" id="addProj">新增一筆</button>
+			</div>
+			<div id="projList"></div>
+		</section>
+
+		<section class="card" id="langSection">
+			<div class="section-header">
+				<h2>語言（健檢）</h2>
+				<button class="button secondary" id="addLang">新增一筆</button>
+			</div>
+			<div id="langList"></div>
+		</section>
+
+		<section class="card" id="certSection">
+			<div class="section-header">
+				<h2>證照（健檢）</h2>
+				<button class="button secondary" id="addCert">新增一筆</button>
+			</div>
+			<div id="certList"></div>
+		</section>
+
+		<section class="card">
+			<div class="notice">
+				<div>履歷分數：<strong id="score">82</strong></div>
+				<div class="help" id="scoreComment">AI：整體結構良好，建議補充分項指標與成果量化。</div>
+			</div>
+		</section>
+
+		<div class="actions">
+			<button class="button secondary" id="btnBack">上一步</button>
+			<button class="button danger" id="btnClear">清除</button>
+			<button class="button" id="btnDraft">草稿</button>
+			<button class="button" id="btnSaveExit">儲存並離開</button>
+			<button class="button" id="btnSaveAgain">儲存並再次履歷健檢</button>
+			<button class="button primary" id="btnSaveInterview">儲存並直接面試</button>
+		</div>
+
+
+	</div>
+	<script src="../assets/js/common.js"></script>
+	<script src="../assets/js/api.js"></script>
+	<script src="../assets/js/review.js"></script>
+</body>
+
+</html>

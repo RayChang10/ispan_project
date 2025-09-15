@@ -1,0 +1,1625 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>JobMate360 | 虛擬面試</title>
+	<link rel="icon" type="image/png" href="/favicon.ico" />
+	<link rel="stylesheet" href="../assets/css/styles.css" />
+	<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+	<style>
+		/* 動畫效果 */
+		@keyframes blink {
+			0% {
+				opacity: 1;
+			}
+
+			50% {
+				opacity: 0.3;
+			}
+
+			100% {
+				opacity: 1;
+			}
+		}
+
+		@keyframes pulse {
+			0% {
+				box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7);
+			}
+
+			70% {
+				box-shadow: 0 0 0 15px rgba(220, 53, 69, 0);
+			}
+
+			100% {
+				box-shadow: 0 0 0 0 rgba(220, 53, 69, 0);
+			}
+		}
+
+		.recording-pulse {
+			animation: pulse 1.5s infinite;
+		}
+
+		.status-connected {
+			background-color: #28a745 !important;
+		}
+
+		.status-disconnected {
+			background-color: #dc3545 !important;
+		}
+
+		.status-connecting {
+			background-color: #ffc107 !important;
+		}
+
+		/* 響應式調整 */
+		.controls-container .row {
+			display: flex;
+			flex-wrap: wrap;
+			gap: 10px;
+		}
+
+		.col-md-6 {
+			flex: 1;
+			min-width: 200px;
+		}
+
+		.mb-2,
+		.mb-3 {
+			margin-bottom: 10px;
+		}
+
+		input[type="range"] {
+			-webkit-appearance: none;
+			-moz-appearance: none;
+			appearance: none;
+			height: 5px;
+			border-radius: 5px;
+			background: #ddd;
+			outline: none;
+		}
+
+		input[type="range"]::-webkit-slider-thumb {
+			-webkit-appearance: none;
+			-moz-appearance: none;
+			appearance: none;
+			width: 20px;
+			height: 20px;
+			border-radius: 50%;
+			background: #4361ee;
+			cursor: pointer;
+		}
+
+		input[type="range"]::-moz-range-thumb {
+			appearance: none;
+			width: 20px;
+			height: 20px;
+			border-radius: 50%;
+			background: #4361ee;
+			cursor: pointer;
+			border: none;
+		}
+
+		.form-check-input {
+			margin-right: 8px;
+		}
+
+		/* 載入動畫樣式 */
+		@keyframes spin {
+			0% {
+				transform: rotate(0deg);
+			}
+
+			100% {
+				transform: rotate(360deg);
+			}
+		}
+
+		@keyframes fadeIn {
+			from {
+				opacity: 0;
+			}
+
+			to {
+				opacity: 1;
+			}
+		}
+
+		#connection-loading {
+			animation: fadeIn 0.3s ease-in;
+		}
+
+		.loading-spinner {
+			animation: spin 1s linear infinite;
+		}
+	</style>
+</head>
+
+<body>
+	<div class="container full interview">
+		<header class="header">
+			<h1>虛擬面試</h1>
+			<span class="badge">步驟 3 / 3</span>
+		</header>
+
+		<section class="row"
+			style="margin-bottom:0; display: flex !important; flex-direction: row !important; flex-wrap: nowrap !important; align-items: stretch !important; min-height: 200vh;"
+			id="main-section">
+			<div class="col card col-avatar" id="avatar-section"
+				style="flex: 0 0 30% !important; max-width: 30% !important; display: flex !important; flex-direction: column !important;">
+				<div class="card-header"
+					style="background-color: #4361ee; color: white; font-weight: 600; padding: 15px 20px; border-bottom: none; border-radius: 12px 12px 0 0; display: flex; justify-content: space-between; align-items: center;">
+					<div>
+						<span class="status-indicator status-disconnected" id="connection-status"
+							style="width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-right: 5px; background-color: #dc3545;"></span>
+						<span id="status-text">虛擬人未連接</span>
+					</div>
+				</div>
+
+				<!-- 影片容器 -->
+				<div class="video-container"
+					style="position: relative; width: 100%; height: 100%; background-color: #000; overflow: hidden; justify-content: center; align-items: center; flex: 1 1 auto; min-height: 600px;">
+					<!-- 添加隱藏的 audio 元素以支援 WebRTC -->
+					<audio id="audio" autoplay="true" style="display: none;"></audio>
+					<video id="video" autoplay playsinline
+						style="width: 100%; height: 100%; display: block; object-fit: cover; background: #000; position: absolute; top: 0; left: 0;"></video>
+
+					<!-- 連接狀態載入指示器 -->
+					<div id="connection-loading"
+						style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; flex-direction: column; justify-content: center; align-items: center; background: rgba(0,0,0,0.8); color: white; z-index: 10;">
+						<div class="loading-spinner"
+							style="width: 40px; height: 40px; border: 3px solid #374151; border-top: 3px solid #4361ee; border-radius: 50%; animation: spin 1s linear infinite; margin-bottom: 15px;">
+						</div>
+						<div id="loading-text" style="font-size: 16px; margin-bottom: 10px;">正在連接虛擬人...</div>
+						<div id="loading-detail"
+							style="font-size: 12px; color: #ccc; text-align: center; max-width: 250px;">初始化中，請稍候</div>
+						<div id="loading-progress"
+							style="width: 200px; height: 4px; background: #374151; border-radius: 2px; margin-top: 15px; overflow: hidden;">
+							<div id="progress-bar"
+								style="width: 0%; height: 100%; background: linear-gradient(90deg, #4361ee, #22c55e); border-radius: 2px; transition: width 0.3s ease;">
+							</div>
+						</div>
+					</div>
+
+					<!-- 錄製指示器 -->
+					<div class="recording-indicator" id="recording-indicator"
+						style="position: absolute; top: 15px; right: 15px; background-color: rgba(220, 53, 69, 0.8); color: white; padding: 5px 10px; border-radius: 20px; font-size: 0.8rem; display: none; align-items: center;">
+						<div class="blink"
+							style="width: 10px; height: 10px; background-color: #fff; border-radius: 50%; margin-right: 5px; animation: blink 1s infinite;">
+						</div>
+						<span>錄製中</span>
+					</div>
+
+					<!-- 降級模式顯示 -->
+					<div id="avatar-fallback"
+						style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: none; text-align: center; padding: 30px 20px; color: #666; flex-direction: column; justify-content: center; align-items: center; background: #2a2a2a;">
+						<div style="font-size: 48px; margin-bottom: 15px;">💬</div>
+						<h4 style="margin: 0 0 10px 0; color: #fff;">純對話模式</h4>
+						<p style="margin: 5px 0; font-size: 14px; color: #ccc;" id="fallback-reason">
+							虛擬人服務正在初始化中，對話功能完全正常</p>
+						<p style="margin: 5px 0; font-size: 12px; color: #888;">💡
+							提示：虛擬人連線有時會不穩定，這是正常現象。您可以點擊「重試連接」或直接開始面試。</p>
+						<p style="margin: 5px 0; font-size: 12px; opacity: 0.7; color: #999;">對話功能完全正常，請繼續您的面試</p>
+						<div style="margin-top: 15px; display: flex; gap: 8px;">
+							<button id="retry-avatar" class="button secondary"
+								style="font-size: 16px; padding: 12px 16px; flex: 1;">重試連接</button>
+							<button id="start-interview-anyway" class="button primary"
+								style="font-size: 16px; padding: 12px 16px; flex: 1;">開始面試</button>
+						</div>
+					</div>
+				</div>
+
+				<!-- 控制面板 -->
+				<div class="controls-container" style="padding: 15px; flex: 0 0 auto; border-top: 1px solid #1f2937;">
+
+
+					<!-- 自我介紹階段按鈕 -->
+					<div class="intro-actions" id="intro-actions"
+						style="margin-top: 8px; padding: 8px; background: rgba(255,255,255,0.1); border-radius: 8px; display: none; gap: 8px; flex-wrap: wrap; align-items: center;">
+						<button class="button primary" id="complete-intro"
+							style="padding: 12px 16px; font-size: 16px; flex: 1; min-width: 120px; max-width: 200px; width: 50%; box-sizing: border-box; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; height: 48px; line-height: 1.5; resize: none; outline: none; border: none; cursor: pointer;">完成自介</button>
+						<button class="button secondary" id="restart-intro"
+							style="padding: 12px 16px; font-size: 16px; flex: 1; min-width: 120px; max-width: 200px; width: 50%; box-sizing: border-box; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; height: 48px; line-height: 1.5; resize: none; outline: none; border: none; cursor: pointer;">重新開始</button>
+					</div>
+
+					<!-- 面試控制按鈕 -->
+					<div class="actions" id="main-actions"
+						style="margin-top: 8px; padding: 8px; background: rgba(255,255,255,0.1); border-radius: 8px; display: flex !important; gap: 8px; flex-wrap: wrap; align-items: center;">
+						<button class="button" id="start"
+							style="display: inline-block !important; padding: 12px 16px; font-size: 16px; flex: 1;">開始面試</button>
+						<button class="button secondary" id="pause"
+							style="display: inline-block !important; padding: 12px 16px; font-size: 16px; flex: 1;">暫停面試</button>
+						<button class="button danger" id="stop"
+							style="display: inline-block !important; padding: 12px 16px; font-size: 16px; flex: 1;">結束面試</button>
+						<button class="button warning" id="restart-interview"
+							style="display: none; padding: 12px 16px; font-size: 16px; flex: 1;">重新開始</button>
+						<button class="button danger" id="exit-interview"
+							style="display: none; padding: 12px 16px; font-size: 16px; flex: 1;">退出面試</button>
+						<span class="timer" id="timer"
+							style="display: inline-block !important; margin-left: auto; font-size: 16px; padding: 12px 8px; min-width: 60px; text-align: center;">00:00</span>
+					</div>
+
+
+
+
+				</div>
+			</div>
+			<div class="col card col-chat" id="chat-section"
+				style="flex: 1 1 70% !important; max-width: 70% !important; display: flex !important; flex-direction: column !important;">
+				<h3
+					style="margin: 0 0 16px 0; padding: 15px 20px; background-color: #4361ee; color: white; font-weight: 600; border-radius: 12px 12px 0 0; flex: 0 0 auto;">
+					對話</h3>
+				<div class="chat" id="chat" style="flex: 1 1 auto; margin: 0 16px;"></div>
+				<div class="input-row" style="flex: 0 0 auto; margin: 16px; margin-top: 10px; gap: 8px;">
+					<input id="msg" class="input" placeholder="作答或提問..." style="flex: 1;" />
+					<button id="mic" class="button mic"
+						style="padding: 12px 16px; font-size: 16px; width: auto; min-width: 50px;">🎤</button>
+					<button id="send" class="button primary" style="padding: 12px 16px; font-size: 16px;">送出</button>
+				</div>
+			</div>
+		</section>
+	</div>
+	<script src="../assets/js/common.js"></script>
+	<!-- LiveTalking JavaScript 檔案 - 如果檔案不存在則跳過 -->
+	<script>
+		// 動態載入 LiveTalking 相關檔案，如果不存在則跳過
+		function loadScript(src, callback) {
+			const script = document.createElement('script');
+			script.src = src;
+			script.onload = callback || function () { };
+			script.onerror = function () {
+				console.warn('無法載入腳本:', src);
+			};
+			document.head.appendChild(script);
+		}
+
+		// 嘗試載入 LiveTalking 相關檔案
+		loadScript('../../Livetalking_virtual_interview/web/client.js');
+		loadScript('../../Livetalking_virtual_interview/web/srs.sdk.js');
+	</script>
+	<script src="../assets/js/interview.js"></script> <!-- 虛擬人影片嵌入 -->
+
+	<!-- 隱藏的會話ID -->
+	<input type="hidden" id="sessionid" value="0">
+
+	<script>
+		// 攔截並處理已知的 LiveTalking 錯誤
+		const originalConsoleError = console.error;
+		console.error = function (...args) {
+			const message = args.join(' ');
+
+			// 檢查是否為已知的 LiveTalking 錯誤
+			if (message.includes('404') && message.includes('index.json')) {
+				console.warn('[Interview] 已知問題: LiveTalking index.json 端點不存在，這是正常的');
+				return; // 不顯示這個錯誤
+			}
+
+			if (message.includes('422') && message.includes('ltapi/offer')) {
+				console.warn('[Interview] 已知問題: LiveTalking 服務正在初始化中，WebRTC 暫時不可用');
+				return; // 不顯示這個錯誤
+			}
+
+			if (message.includes('回應缺少有效 SDP')) {
+				console.warn('[Interview] 已知問題: 虛擬人服務未準備就緒，將自動切換到純對話模式');
+				return; // 不顯示這個錯誤
+			}
+
+			// 其他錯誤正常顯示
+			originalConsoleError.apply(console, args);
+		};
+
+		// 全域面試階段管理
+		window.InterviewStageManager = {
+			currentStage: 'waiting', // waiting, intro, questioning, finished
+			interviewStarted: false,
+
+			setStage: function (stage) {
+				this.currentStage = stage;
+				console.log(`🎯 面試階段變更: ${stage}`);
+
+				// 保存階段狀態到 localStorage
+				localStorage.setItem('interview_stage', stage);
+				if (stage === 'intro' || stage === 'questioning') {
+					localStorage.setItem('interview_state', 'running');
+				} else if (stage === 'finished') {
+					localStorage.setItem('interview_state', 'finished');
+				}
+
+				// 廣播階段變更事件
+				window.dispatchEvent(new CustomEvent('interviewStageChange', {
+					detail: { stage: stage, timestamp: Date.now() }
+				}));
+			},
+
+			getStage: function () {
+				return this.currentStage;
+			},
+
+			isInProgress: function () {
+				return this.currentStage === 'intro' || this.currentStage === 'questioning';
+			},
+
+			canStart: function () {
+				return this.currentStage === 'waiting' || this.currentStage === 'finished';
+			}
+		};
+
+		// 虛擬人影片控制整合
+		document.addEventListener('DOMContentLoaded', function () {
+			// 連接狀態管理
+			function updateConnectionStatus(status) {
+				const statusIndicator = document.getElementById('connection-status');
+				const statusText = document.getElementById('status-text');
+				const loadingOverlay = document.getElementById('connection-loading');
+				const loadingText = document.getElementById('loading-text');
+				const loadingDetail = document.getElementById('loading-detail');
+				const progressBar = document.getElementById('progress-bar');
+
+				if (statusIndicator) {
+					statusIndicator.className = `status-indicator status-${status}`;
+				}
+
+				if (statusText) {
+					switch (status) {
+						case 'connected':
+							statusText.textContent = '虛擬人已連接';
+							if (loadingOverlay) loadingOverlay.style.display = 'none';
+							break;
+						case 'connecting':
+							statusText.textContent = '連接中...';
+							if (loadingOverlay) loadingOverlay.style.display = 'flex';
+							if (loadingText) loadingText.textContent = '正在連接虛擬人...';
+							if (loadingDetail) loadingDetail.textContent = '建立 WebRTC 連接中';
+							if (progressBar) progressBar.style.width = '30%';
+							break;
+						case 'disconnected':
+						default:
+							statusText.textContent = '虛擬人未連接';
+							if (loadingOverlay) loadingOverlay.style.display = 'none';
+							break;
+					}
+				}
+			}
+
+			// 更新載入進度
+			function updateLoadingProgress(progress, text, detail) {
+				const loadingText = document.getElementById('loading-text');
+				const loadingDetail = document.getElementById('loading-detail');
+				const progressBar = document.getElementById('progress-bar');
+
+				if (loadingText && text) loadingText.textContent = text;
+				if (loadingDetail && detail) loadingDetail.textContent = detail;
+				if (progressBar) progressBar.style.width = progress + '%';
+			}
+
+
+
+			// 虛擬人連接控制（這些按鈕在HTML中不存在，移除相關邏輯）
+			// const startConnectionBtn = document.getElementById('start-connection');
+			// const stopConnectionBtn = document.getElementById('stop-connection');
+
+			// 檢查 LiveTalking 服務狀態
+			async function checkLiveTalkingService() {
+				try {
+					console.log('檢查 LiveTalking 服務狀態...');
+					const response = await fetch('/ltapi/index.json', {
+						method: 'GET',
+						timeout: 5000
+					});
+
+					if (response.ok) {
+						console.log('LiveTalking 服務可用');
+						return true;
+					} else {
+						console.log('LiveTalking 服務回應異常:', response.status);
+						return false;
+					}
+				} catch (error) {
+					console.log('LiveTalking 服務檢查失敗:', error.message);
+					return false;
+				}
+			}
+
+			// 自動觸發連接函數
+			async function autoStartConnection() {
+				updateConnectionStatus('connecting');
+				updateLoadingProgress(10, '正在初始化...', '檢查系統狀態');
+
+				// 先檢查服務狀態
+				const serviceAvailable = await checkLiveTalkingService();
+				if (!serviceAvailable) {
+					console.log('LiveTalking 服務不可用，直接使用備用模式');
+					updateLoadingProgress(30, '服務不可用', '切換到純對話模式');
+					setTimeout(() => {
+						updateConnectionStatus('disconnected');
+						const fallback = document.getElementById('avatar-fallback');
+						if (fallback) {
+							fallback.style.display = 'flex';
+						}
+					}, 2000);
+					return;
+				}
+
+				// 優先使用 LiveTalking 的 start 函數
+				if (typeof start === 'function') {
+					console.log('自動啟動：使用 LiveTalking start 函數');
+					updateLoadingProgress(20, '載入 LiveTalking...', '準備虛擬人服務');
+
+					try {
+						setTimeout(async () => {
+							updateLoadingProgress(40, '建立連接...', '正在連接到虛擬人服務（首次啟動可能需要較長時間）');
+							try {
+								// 設定一個更寬鬆的超時機制 - 初次連接需要更多時間
+								const startPromise = start();
+								const timeoutPromise = new Promise((_, reject) => {
+									setTimeout(() => reject(new Error('連接超時')), 180000); // 3分鐘超時，給 LiveTalking 更多初始化時間
+								});
+
+								// 添加中途進度提示
+								const progressTimeout = setTimeout(() => {
+									updateLoadingProgress(60, '系統初始化中...', '虛擬人服務正在準備，請稍候');
+								}, 8000); // 8秒後顯示進度提示
+
+								try {
+									await Promise.race([startPromise, timeoutPromise]);
+									clearTimeout(progressTimeout); // 成功時清除進度提示
+								} catch (error) {
+									clearTimeout(progressTimeout); // 失敗時也要清除
+									throw error;
+								}
+
+								// 連接成功，但需要等待模型初始化
+								updateLoadingProgress(90, '虛擬人連接成功', '等待模型載入完成');
+
+								// 給予模型初始化時間
+								setTimeout(() => {
+									updateLoadingProgress(95, '模型載入中...', '虛擬人正在準備視訊流');
+								}, 2000);
+
+								setTimeout(() => {
+									updateLoadingProgress(100, '初始化完成', '虛擬人已就緒');
+									setTimeout(() => updateConnectionStatus('connected'), 500);
+								}, 6000); // 給予充分的模型載入時間
+
+								// 隱藏降級模式
+								const fallback = document.getElementById('avatar-fallback');
+								if (fallback) {
+									fallback.style.display = 'none';
+								}
+							} catch (startError) {
+								console.error('LiveTalking start 內部失敗:', startError);
+
+								// 根據錯誤類型提供不同的處理
+								if (startError.message.includes('404') || startError.message.includes('index.json')) {
+									updateLoadingProgress(60, 'Session 服務不可用', '嘗試直接 WebRTC 連接');
+								} else if (startError.message.includes('422') || startError.message.includes('SDP')) {
+									updateLoadingProgress(60, 'WebRTC 信令失敗', '服務正在初始化中，嘗試重試');
+								} else if (startError.message.includes('連接超時')) {
+									updateLoadingProgress(60, '連接超時', '服務啟動較慢，嘗試重試');
+								} else {
+									updateLoadingProgress(60, 'LiveTalking 連接失敗', '嘗試重試連接');
+								}
+
+								// 嘗試智能重試
+								setTimeout(() => {
+									if (retryCount < maxRetries) {
+										console.log('觸發智能重試機制');
+										smartRetryConnection();
+									} else {
+										console.log('重試次數已達上限，切換到備用模式');
+										startPlay();
+									}
+								}, 2000);
+							}
+						}, 500);
+					} catch (error) {
+						console.error('LiveTalking start 失敗:', error);
+						updateLoadingProgress(50, 'LiveTalking 服務不可用', '嘗試重試或切換備用模式');
+
+						// 嘗試智能重試
+						setTimeout(() => {
+							if (retryCount < maxRetries) {
+								console.log('觸發智能重試機制');
+								smartRetryConnection();
+							} else {
+								console.log('重試次數已達上限，切換到備用模式');
+								startPlay();
+							}
+						}, 1000);
+					}
+				} else {
+					console.log('LiveTalking start 函數不可用，使用備用模式');
+					updateLoadingProgress(30, '啟動 WebRTC...', 'LiveTalking 組件未載入，使用備用連接模式');
+					// 備用：直接啟動 WebRTC
+					setTimeout(() => startPlay(), 500);
+				}
+
+				// 更新按鈕狀態（移除不存在的按鈕邏輯）
+				// if (startConnectionBtn) {
+				// 	startConnectionBtn.style.display = 'none';
+				// 	startConnectionBtn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> 重新連接';
+				// }
+				// if (stopConnectionBtn) stopConnectionBtn.style.display = 'block';
+
+				// 檢查連接狀態
+				let connectionCheckTimer = setInterval(function () {
+					if (video && video.readyState >= 3 && video.videoWidth > 0) {
+						updateConnectionStatus('connected');
+						clearInterval(connectionCheckTimer);
+					}
+				}, 2000);
+
+				// 60秒後超時，顯示錯誤訊息
+				setTimeout(function () {
+					if (connectionCheckTimer) {
+						clearInterval(connectionCheckTimer);
+						updateLoadingProgress(95, '連接超時', '請檢查網路連接或重新嘗試');
+						setTimeout(() => {
+							updateConnectionStatus('disconnected');
+							// 顯示降級模式
+							const fallback = document.getElementById('avatar-fallback');
+							if (fallback) {
+								fallback.style.display = 'flex';
+							}
+							// 顯示重新連接按鈕（移除不存在的按鈕邏輯）
+							// if (startConnectionBtn) {
+							// 	startConnectionBtn.style.display = 'block';
+							// 	startConnectionBtn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> 重新連接';
+							// }
+							// if (stopConnectionBtn) {
+							// 	stopConnectionBtn.style.display = 'none';
+							// }
+						}, 2000);
+					}
+				}, 60000); // 改為60秒超時
+			}
+
+			// 手動點擊按鈕時也可以觸發（移除不存在的按鈕邏輯）
+			// if (startConnectionBtn) {
+			// 	startConnectionBtn.addEventListener('click', function () {
+			// 		console.log('用戶手動點擊重新連接按鈕');
+			// 
+			// 		// 完全重置狀態
+			// 		if (window.sdk) {
+			// 			window.sdk.close();
+			// 			window.sdk = null;
+			// 		}
+			// 
+			// 		// 隱藏所有提示
+			// 		const fallback = document.getElementById('avatar-fallback');
+			// 		if (fallback) {
+			// 			fallback.style.display = 'none';
+			// 		}
+			// 
+			// 		// 重新嘗試連接
+			// 		autoStartConnection();
+			// 	});
+			// }
+
+			// 初始化載入狀態
+			updateLoadingProgress(0, '系統啟動中...', '正在載入虛擬人系統');
+
+			// 檢查組件載入狀態的函數
+			function waitForComponentsAndStart() {
+				let attempts = 0;
+				const maxAttempts = 10; // 最多檢查10次
+
+				function checkAndStart() {
+					attempts++;
+					console.log(`檢查組件載入狀態 (第${attempts}次)`);
+
+					// 更新載入進度
+					const progress = Math.min(5 + (attempts * 3), 25);
+					updateLoadingProgress(progress, '載入虛擬人組件...', `檢查第 ${attempts}/${maxAttempts} 次`);
+
+					// 檢查 LiveTalking 相關組件是否載入完成
+					const ltViewerLoaded = typeof window.start === 'function' || typeof window.LT !== 'undefined';
+					const webrtcLoaded = typeof SrsRtcWhipWhepAsync !== 'undefined';
+
+					console.log('LiveTalking 組件載入:', ltViewerLoaded);
+					console.log('WebRTC 組件載入:', webrtcLoaded);
+
+					if (ltViewerLoaded || webrtcLoaded || attempts >= maxAttempts) {
+						console.log('組件載入完成或達到最大嘗試次數，開始連接...');
+						if (ltViewerLoaded) {
+							updateLoadingProgress(30, 'LiveTalking 組件已載入', '準備建立虛擬人連接');
+						} else if (webrtcLoaded) {
+							updateLoadingProgress(30, 'WebRTC 組件已載入', '準備建立備用連接');
+						} else {
+							updateLoadingProgress(30, '使用備用模式', '直接載入連接邏輯');
+						}
+						setTimeout(() => autoStartConnection().catch(error => {
+							console.error('組件載入後連接失敗:', error);
+						}), 500);
+					} else {
+						console.log('組件還在載入中，等待500ms後重試...');
+						setTimeout(checkAndStart, 500);
+					}
+				}
+
+				// 先等待1秒讓基本DOM完成載入
+				setTimeout(checkAndStart, 1000);
+			}
+
+			// 頁面載入完成後開始檢查和連接
+			waitForComponentsAndStart();
+
+			// 移除不存在的停止連接按鈕邏輯
+			// if (stopConnectionBtn) {
+			// 	stopConnectionBtn.addEventListener('click', function () {
+			// 		console.log('用戶手動停止連接');
+			// 
+			// 		// 隱藏載入畫面
+			// 		const loadingOverlay = document.getElementById('connection-loading');
+			// 		if (loadingOverlay) {
+			// 			loadingOverlay.style.display = 'none';
+			// 		}
+			// 
+			// 		// 優先使用 LiveTalking 的 stop 函數
+			// 		if (typeof stop === 'function') {
+			// 			console.log('使用 LiveTalking stop 函數');
+			// 			try {
+			// 				stop();
+			// 			} catch (error) {
+			// 				console.error('LiveTalking stop 失敗:', error);
+			// 			}
+			// 		} else {
+			// 			console.log('LiveTalking stop 函數不可用');
+			// 		}
+			// 
+			// 		// 關閉備用 WebRTC 連接
+			// 		if (window.sdk) {
+			// 			window.sdk.close();
+			// 			window.sdk = null;
+			// 			console.log('已關閉 WebRTC 連接');
+			// 		}
+			// 
+			// 		// 隱藏所有降級模式
+			// 		const fallback = document.getElementById('avatar-fallback');
+			// 		if (fallback) {
+			// 				fallback.style.display = 'none';
+			// 			}
+			// 
+			// 		updateConnectionStatus('disconnected');
+			// 		this.style.display = 'none';
+			// 		if (startConnectionBtn) {
+			// 			startConnectionBtn.style.display = 'block';
+			// 			startConnectionBtn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> 重新連接';
+			// 		}
+			// 	});
+			// }
+
+			// 錄製控制（這些按鈕在HTML中不存在，移除相關邏輯）
+			// const btnStartRecord = document.getElementById('btn_start_record');
+			// const btnStopRecord = document.getElementById('btn_stop_record');
+			// const recordingIndicator = document.getElementById('recording-indicator');
+			// 
+			// if (btnStartRecord) {
+			// 	btnStartRecord.addEventListener('click', function () {
+			// 		console.log('Starting recording...');
+			// 		fetch('/ltapi/record', {
+			// 			method: 'POST',
+			// 			headers: { 'Content-Type': 'application/json' },
+			// 			body: JSON.stringify({
+			// 			type: 'start_record',
+			// 			sessionid: parseInt(document.getElementById('sessionid').value),
+			// 		})
+			// 		}).then(function (response) {
+			// 			if (response.ok) {
+			// 				console.log('Recording started.');
+			// 				btnStartRecord.disabled = true;
+			// 				if (btnStopRecord) btnStopRecord.disabled = false;
+			// 				if (recordingIndicator) recordingIndicator.style.display = 'flex';
+			// 			} else {
+			// 				console.error('Failed to start recording.');
+			// 			}
+			// 		}).catch(function (error) {
+			// 			console.error('Recording error:', error);
+			// 		});
+			// 	});
+			// }
+			// 
+			// if (btnStopRecord) {
+			// 	btnStopRecord.addEventListener('click', function () {
+			// 		console.log('Stopping recording...');
+			// 		fetch('/ltapi/record', {
+			// 			method: 'POST',
+			// 			headers: { 'Content-Type': 'application/json' },
+			// 			body: JSON.stringify({
+			// 			type: 'end_record',
+			// 			sessionid: parseInt(document.getElementById('sessionid').value),
+			// 		})
+			// 		}).then(function (response) {
+			// 			if (response.ok) {
+			// 				console.log('Recording stopped.');
+			// 				if (btnStartRecord) btnStartRecord.disabled = false;
+			// 				btnStopRecord.disabled = true;
+			// 				if (recordingIndicator) recordingIndicator.style.display = 'none';
+			// 			} else {
+			// 				console.error('Failed to stop recording.');
+			// 			}
+			// 		}).catch(function (error) {
+			// 			console.error('Recording error:', error);
+			// 		});
+			// 	});
+			// }
+
+			// WebRTC 播放功能
+			window.sdk = null; // 使用 window.sdk 確保全域可存取
+
+			window.startPlay = function () {
+				updateLoadingProgress(60, '檢查 WebRTC 支援...', '驗證瀏覽器兼容性');
+
+				// 檢查是否有 SrsRtcWhipWhepAsync 可用
+				if (typeof SrsRtcWhipWhepAsync === 'undefined') {
+					console.warn('SrsRtcWhipWhepAsync 未載入，使用備用模式');
+					updateLoadingProgress(90, '服務不可用', 'WebRTC 組件未載入，切換到純對話模式');
+					setTimeout(() => {
+						updateConnectionStatus('disconnected');
+						// 顯示降級模式
+						if (document.getElementById('avatar-fallback')) {
+							document.getElementById('avatar-fallback').style.display = 'flex';
+						}
+					}, 2000);
+					return;
+				}
+
+				updateLoadingProgress(70, '建立 WebRTC 連接...', '初始化媒體流');
+
+				if (window.sdk) {
+					window.sdk.close();
+				}
+
+				try {
+					window.sdk = new SrsRtcWhipWhepAsync();
+					const video = document.getElementById('video');
+					if (video) {
+						video.srcObject = window.sdk.stream;
+					}
+
+					updateLoadingProgress(80, '連接媒體服務器...', '正在建立音視頻通道');
+
+					// 檢查 LiveTalking 服務狀態 - 使用更智能的錯誤處理
+					updateLoadingProgress(82, '檢查服務狀態...', '驗證虛擬人服務可用性');
+
+					fetch('/ltapi/offer', {
+						method: 'POST',
+						headers: { 'Content-Type': 'application/json' },
+						body: JSON.stringify({ test: 'status_check' })
+					}).then(response => {
+						if (!response.ok) {
+							throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+						}
+						return response.json();
+					})
+						.then(data => {
+							// 檢查服務狀態，但優先使用成功的連線方式
+							if (data && data.data && data.data.status === 'fallback') {
+								console.log('[Interview] LiveTalking 服務在備用模式');
+								updateLoadingProgress(85, '服務在備用模式', '切換到純對話模式');
+
+								// 顯示備用模式並讓用戶選擇
+								setTimeout(() => {
+									updateConnectionStatus('disconnected');
+									const fallback = document.getElementById('avatar-fallback');
+									const fallbackReason = document.getElementById('fallback-reason');
+									if (fallback) {
+										fallback.style.display = 'flex';
+									}
+									if (fallbackReason) {
+										fallbackReason.textContent = '虛擬人服務正在初始化中，對話功能完全正常';
+									}
+									// 顯示重新連接按鈕（移除不存在的按鈕邏輯）
+									// if (startConnectionBtn) {
+									// 	startConnectionBtn.style.display = 'block';
+									// 	startConnectionBtn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> 重新連接';
+									// }
+									// if (stopConnectionBtn) {
+									// 	stopConnectionBtn.style.display = 'none';
+									// }
+								}, 1500);
+								return;
+							}
+
+							// 如果不是備用模式，說明 LiveTalking 可能可用，但我們依然使用安全的連線方式
+							console.log('[Interview] 嘗試 LiveTalking 連接');
+							updateLoadingProgress(85, '連接虛擬人服務', '建立 WebRTC 視訊連線');
+
+							// 使用與"開始面試"相同的邏輯
+							if (typeof start === 'function') {
+								console.log('使用 LiveTalking 原生連接');
+								try {
+									start(); // 觸發 LiveTalking 的 WebRTC 連接
+									updateLoadingProgress(95, '建立視訊連接', 'LiveTalking 連接中');
+
+									// 定期檢查視訊流是否就緒，而不是僅依賴時間
+									let checkAttempts = 0;
+									const maxCheckAttempts = 20; // 最多檢查20次（20秒）
+
+									const checkVideoStream = () => {
+										checkAttempts++;
+										const video = document.getElementById('video');
+										const hasVideoStream = video && video.srcObject && video.srcObject.getVideoTracks().length > 0;
+
+										console.log(`檢查視訊流狀態 (${checkAttempts}/${maxCheckAttempts}):`, hasVideoStream);
+
+										if (hasVideoStream) {
+											// 視訊流就緒
+											updateLoadingProgress(100, '連接成功！', '虛擬人視訊已就緒');
+											setTimeout(() => updateConnectionStatus('connected'), 500);
+										} else if (checkAttempts < maxCheckAttempts) {
+											// 繼續等待
+											if (checkAttempts === 3) {
+												updateLoadingProgress(98, '模型初始化中...', '虛擬人正在準備視訊流');
+											}
+											setTimeout(checkVideoStream, 1000); // 每秒檢查一次
+										} else {
+											// 超時，但仍標記為連接（可能是純音訊）
+											console.warn('視訊流檢查超時，但保持連接狀態');
+											updateLoadingProgress(100, '連接完成', '音訊連接已建立');
+											setTimeout(() => updateConnectionStatus('connected'), 500);
+										}
+									};
+
+									// 3秒後開始檢查視訊流
+									setTimeout(checkVideoStream, 3000);
+
+								} catch (error) {
+									console.error('LiveTalking start 失敗:', error);
+									handleConnectionFailure('LiveTalking 連接失敗');
+								}
+							} else {
+								console.warn('LiveTalking start 函數不可用');
+								handleConnectionFailure('LiveTalking 服務不可用');
+							}
+						}).catch(error => {
+							console.warn('[Interview] 服務狀態檢查失敗，直接使用純對話模式:', error);
+							handleConnectionFailure('服務不可用');
+						});
+
+					// 統一的連接失敗處理函數
+					function handleConnectionFailure(reason) {
+						updateLoadingProgress(95, '切換純對話模式', reason + '，對話功能完全正常');
+						setTimeout(() => {
+							updateConnectionStatus('disconnected');
+							const fallback = document.getElementById('avatar-fallback');
+							const fallbackReason = document.getElementById('fallback-reason');
+							if (fallback) {
+								fallback.style.display = 'flex';
+							}
+							if (fallbackReason) {
+								fallbackReason.textContent = reason + '，對話功能完全正常';
+							}
+							// 顯示重新連接按鈕（移除不存在的按鈕邏輯）
+							// if (startConnectionBtn) {
+							// 	startConnectionBtn.style.display = 'block';
+							// 	startConnectionBtn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> 重新連接';
+							// }
+							// if (stopConnectionBtn) {
+							// 	stopConnectionBtn.style.display = 'none';
+							// }
+						}, 1500);
+					}
+				} catch (error) {
+					console.error('WebRTC 初始化失敗:', error);
+					updateLoadingProgress(90, '初始化失敗', '瀏覽器不支援 WebRTC 或網路連接異常');
+					setTimeout(() => {
+						updateConnectionStatus('disconnected');
+						// 顯示降級模式
+						if (document.getElementById('avatar-fallback')) {
+							document.getElementById('avatar-fallback').style.display = 'flex';
+						}
+						// 顯示重新連接按鈕（移除不存在的按鈕邏輯）
+						// if (startConnectionBtn) {
+						// 	startConnectionBtn.style.display = 'block';
+						// 	startConnectionBtn.innerHTML = '<i class="bi bi-arrow-clockwise"></i> 重新連接';
+						// }
+						// if (stopConnectionBtn) {
+						// 	stopConnectionBtn.style.display = 'none';
+						// }
+					}, 2000);
+				}
+			};
+
+			// 智能重試連接機制
+			let retryCount = 0;
+			const maxRetries = 3;
+			let retryTimer = null;
+
+			function smartRetryConnection() {
+				if (retryCount >= maxRetries) {
+					console.log('已達到最大重試次數，切換到純對話模式');
+					updateConnectionStatus('disconnected');
+					const fallback = document.getElementById('avatar-fallback');
+					if (fallback) {
+						fallback.style.display = 'flex';
+					}
+					return;
+				}
+
+				retryCount++;
+				const delay = Math.min(2000 * retryCount, 10000); // 指數退避，最大10秒
+
+				console.log(`智能重試連接 (第${retryCount}次)，${delay}ms後重試...`);
+				updateLoadingProgress(70, `重試連接中... (${retryCount}/${maxRetries})`, `等待 ${delay / 1000} 秒後重試`);
+
+				retryTimer = setTimeout(() => {
+					// 完全重置狀態
+					if (window.sdk) {
+						window.sdk.close();
+						window.sdk = null;
+					}
+
+					// 隱藏降級模式
+					const fallback = document.getElementById('avatar-fallback');
+					if (fallback) {
+						fallback.style.display = 'none';
+					}
+
+					// 重新嘗試連接
+					console.log(`開始第${retryCount}次重試連接...`);
+					autoStartConnection().catch(error => {
+						console.error(`第${retryCount}次重試失敗:`, error);
+					});
+				}, delay);
+			}
+
+			// 重試連接按鈕
+			const retryAvatarBtn = document.getElementById('retry-avatar');
+			if (retryAvatarBtn) {
+				retryAvatarBtn.addEventListener('click', function () {
+					console.log('用戶點擊重試連接');
+
+					// 重置重試計數
+					retryCount = 0;
+					if (retryTimer) {
+						clearTimeout(retryTimer);
+						retryTimer = null;
+					}
+
+					// 完全重置狀態
+					if (window.sdk) {
+						window.sdk.close();
+						window.sdk = null;
+					}
+
+					// 隱藏降級模式
+					const fallback = document.getElementById('avatar-fallback');
+					if (fallback) {
+						fallback.style.display = 'none';
+					}
+
+					// 重新嘗試連接
+					console.log('開始重新連接...');
+					autoStartConnection().catch(error => {
+						console.error('重新連接失敗:', error);
+					});
+				});
+			}
+
+			// 直接開始面試按鈕 - 使用統一的處理函數
+			const startInterviewBtn = document.getElementById('start-interview-anyway');
+			if (startInterviewBtn) {
+				startInterviewBtn.addEventListener('click', function () {
+					console.log('用戶選擇直接開始面試（純對話模式）');
+					// 隱藏降級模式背景但保持對話功能
+					const fallback = document.getElementById('avatar-fallback');
+					if (fallback) {
+						fallback.style.display = 'none';
+					}
+					// 使用統一的開始面試處理函數
+					handleStartInterview();
+				});
+			}
+
+			// 初始化狀態
+			updateConnectionStatus('disconnected');
+		});
+
+		window.LT_CONFIG = {
+			speakPath: '/human',
+			speakMethod: 'POST_JSON', // 固定 POST JSON
+			speakParam: 'text',
+			type: 'echo',             // ← 依 8010 的 payload
+			interrupt: true           // ← 依 8010 的 payload
+			// 如果還需要 sessionid / voice / model 等，也可加在這裡
+			// sessionid: 130373
+		};
+		console.log('LT_CONFIG =', window.LT_CONFIG);
+	</script>
+
+	<!-- 先載 viewer（建立 LT.start/stop 並接收影音） -->
+	<script>
+		// 嘗試載入 LiveTalking viewer，如果不存在則創建備用
+		loadScript('/app/lt-viewer.js', function () {
+			console.log('LiveTalking viewer 載入成功');
+		}) || loadScript('/frontend/app/lt-viewer.js', function () {
+			console.log('LiveTalking viewer 載入成功 (備用路徑)');
+		}) || createFallbackLT();
+
+		// 監聽 LiveTalking 載入失敗事件
+		window.addEventListener('ltLoadError', function (event) {
+			console.warn('LiveTalking 載入失敗:', event.detail);
+			updateLoadingProgress(70, 'LiveTalking 不可用', '切換到純對話模式');
+			setTimeout(() => {
+				updateConnectionStatus('disconnected');
+				const fallback = document.getElementById('avatar-fallback');
+				if (fallback) {
+					fallback.style.display = 'flex';
+				}
+			}, 2000);
+		});
+
+		// 載入 speak 擴充
+		loadScript('/app/lt-speak.js', function () {
+			console.log('LiveTalking speak 載入成功');
+		}) || loadScript('/frontend/app/lt-speak.js', function () {
+			console.log('LiveTalking speak 載入成功 (備用路徑)');
+		});
+
+		// 創建備用的 LT 物件，避免 JavaScript 錯誤
+		function createFallbackLT() {
+			if (!window.LT) {
+				window.LT = {
+					start: function () {
+						console.log('LiveTalking 備用模式：start');
+						// 直接觸發錯誤，讓系統切換到WebRTC模式
+						return Promise.reject(new Error('LiveTalking 服務不可用'));
+					},
+					stop: function () { console.log('LiveTalking 備用模式：stop'); },
+					speak: function (text) {
+						console.log('LiveTalking 備用模式：speak -', text);
+						return Promise.resolve();
+					},
+					getSyncConfig: function () {
+						return { syncWithDashboard: false };
+					},
+					setSyncMode: function (enabled) {
+						console.log('LiveTalking 備用模式：setSyncMode -', enabled);
+					},
+					syncToSession: function (sessionId) {
+						console.log('LiveTalking 備用模式：syncToSession -', sessionId);
+					}
+				};
+				console.log('LiveTalking 備用物件已創建');
+			}
+
+			// 提供一個簡單的 start 函數
+			if (!window.start) {
+				window.start = function () {
+					console.log('使用備用 start 函數');
+					return Promise.reject(new Error('LiveTalking 服務不可用，請使用 WebRTC 模式'));
+				};
+			}
+		}
+
+		// 覆蓋 lt-viewer.js 中的錯誤處理
+		window.addEventListener('load', function () {
+			// 如果 window.start 存在但會產生錯誤，我們需要包裝它
+			if (typeof window.start === 'function') {
+				const originalStart = window.start;
+				window.start = async function () {
+					try {
+						return await originalStart();
+					} catch (error) {
+						console.warn('[Interview] LiveTalking start 失敗，原因:', error.message);
+						// 觸發降級模式
+						const event = new CustomEvent('ltLoadError', {
+							detail: {
+								message: error.message,
+								source: 'start_function'
+							}
+						});
+						window.dispatchEvent(event);
+						throw error; // 重新拋出錯誤讓上層處理
+					}
+				};
+			}
+		});
+	</script>
+
+	<script>
+		/* 開始面試後才朗讀（不需要改你的 HTML 結構）
+		* - 監聽整個文件中的「機器人/系統」訊息泡泡（常見 class / data-*）
+		* - 只在按下 #start 之後開始朗讀；#pause/#stop 會停止
+		* - 逐條排隊朗讀，不會打架
+		*/
+		(function () {
+			// 這些選擇器用來辨識「機器人/面試官」的訊息泡泡（可依你實際 class 調整/增刪）
+			const BOT_SELECTORS = [
+				'.bot', '.ai', '.assistant', '.system', '.left',
+				'.chat-bubble.bot', '.message.ai', '.msg.ai',
+				'[data-sender="bot"]', '[data-role="bot"]', '[data-from="ai"]'
+			];
+			const BUBBLE_SEL = BOT_SELECTORS.join(',');
+
+			// 朗讀開關與佇列
+			const ReadAloud = { enabled: false, busy: false, q: [] };
+
+			// 建立隱藏 <audio> 來承接遠端音訊（若尚未存在）
+			function ensureAudioSink() {
+				if (!document.getElementById('lt-remote-audio')) {
+					const a = document.createElement('audio');
+					a.id = 'lt-remote-audio';
+					a.autoplay = true;
+					a.style.display = 'none';
+					document.body.appendChild(a);
+				}
+			}
+
+			// 第一次使用者互動後解鎖瀏覽器的自動播放限制
+			function setupAutoplayUnlockOnce() {
+				const unlock = () => {
+					document.getElementById('lt-remote-audio')?.play().catch(() => { });
+					document.getElementById('lt-remote-video')?.play().catch(() => { });
+					document.removeEventListener('click', unlock);
+				};
+				document.addEventListener('click', unlock, { once: true });
+			}
+
+			async function enqueue(text) {
+				if (!text) return;
+				ReadAloud.q.push(text);
+				processQueue();
+			}
+
+			async function processQueue() {
+				if (!ReadAloud.enabled || ReadAloud.busy) return;
+				const t = ReadAloud.q.shift();
+				if (!t) return;
+				ReadAloud.busy = true;
+				try {
+					// 等待 LT.speak 載入完成
+					await waitForLTSpeak();
+					if (window.LT && typeof LT.speak === 'function') {
+						await LT.speak(t);
+					} else {
+						console.warn('LT.speak 載入失敗，跳過朗讀功能');
+					}
+				} catch (error) {
+					console.warn('朗讀功能出錯:', error);
+				} finally {
+					ReadAloud.busy = false;
+					if (ReadAloud.q.length) setTimeout(processQueue, 50);
+				}
+			}
+
+			async function waitForLTSpeak(maxWait = 5000) {
+				const startTime = Date.now();
+				while (Date.now() - startTime < maxWait) {
+					if (window.LT && typeof window.LT.speak === 'function') {
+						return true;
+					}
+					await new Promise(resolve => setTimeout(resolve, 100));
+				}
+				console.warn('LT.speak 載入超時，可能虛擬人服務不可用');
+				return false;
+			}
+
+			function textOf(el) {
+				return (el.innerText || '').replace(/\s+/g, ' ').trim();
+			}
+
+			function handleAddedNode(node) {
+				if (!(node instanceof HTMLElement)) return;
+				// 新增節點本身或其內部，只要符合「機器人訊息」選擇器，就處理
+				const targets = [];
+				if (node.matches?.(BUBBLE_SEL)) targets.push(node);
+				node.querySelectorAll?.(BUBBLE_SEL).forEach(n => targets.push(n));
+
+				targets.forEach(el => {
+					if (el.dataset.spoken === '1') return; // 已處理過
+					el.dataset.spoken = '1';
+					if (!ReadAloud.enabled) return;
+					const t = textOf(el);
+					if (t) enqueue(t);
+				});
+			}
+
+			function startObservingDocument() {
+				const mo = new MutationObserver(ms => {
+					ms.forEach(m => m.addedNodes.forEach(handleAddedNode));
+				});
+				mo.observe(document.body, { childList: true, subtree: true });
+				// 啟用時，把當前畫面上尚未標記的機器人訊息也掃一遍
+				function scanNow() {
+					document.querySelectorAll(BUBBLE_SEL).forEach(el => {
+						if (el instanceof HTMLElement && el.dataset.spoken !== '1') {
+							handleAddedNode(el);
+						}
+					});
+				}
+				return { mo, scanNow };
+			}
+
+			document.addEventListener('DOMContentLoaded', () => {
+				ensureAudioSink();
+				setupAutoplayUnlockOnce();
+
+				const { scanNow } = startObservingDocument();
+
+				// 面試階段狀態管理
+				const btnStart = document.getElementById('start');
+				const btnPause = document.getElementById('pause');
+				const btnStop = document.getElementById('stop');
+
+				function updateButtonStates() {
+					const currentStage = window.InterviewStageManager.getStage();
+					const introActions = document.getElementById('intro-actions');
+					const mainActions = document.getElementById('main-actions');
+
+					console.log('🔄 updateButtonStates 被調用，當前階段:', currentStage);
+					console.log('introActions 元素:', introActions);
+					console.log('mainActions 元素:', mainActions);
+
+					switch (currentStage) {
+						case 'waiting':
+							// 等待階段：顯示主要按鈕
+							if (introActions) introActions.style.display = 'none';
+							if (mainActions) mainActions.style.display = 'flex';
+							if (btnStart) {
+								btnStart.disabled = false;
+								btnStart.textContent = '開始面試';
+							}
+							if (btnPause) btnPause.disabled = true;
+							if (btnStop) btnStop.disabled = true;
+							break;
+
+						case 'intro':
+							// 自介階段：顯示自介按鈕
+							if (introActions) introActions.style.display = 'flex';
+							if (mainActions) mainActions.style.display = 'none';
+							break;
+
+						case 'questioning':
+							// 面試階段：顯示面試控制按鈕
+							if (introActions) introActions.style.display = 'none';
+							if (mainActions) mainActions.style.display = 'flex';
+							if (btnStart) {
+								btnStart.disabled = false;
+								btnStart.textContent = '重新開始';
+							}
+							if (btnPause) btnPause.disabled = false;
+							if (btnStop) btnStop.disabled = false;
+							break;
+
+						case 'finished':
+							// 結束階段：顯示主要按鈕
+							if (introActions) introActions.style.display = 'none';
+							if (mainActions) mainActions.style.display = 'flex';
+							if (btnStart) {
+								btnStart.disabled = false;
+								btnStart.textContent = '重新開始';
+							}
+							if (btnPause) btnPause.disabled = true;
+							if (btnStop) btnStop.disabled = true;
+							break;
+					}
+				}
+
+				// 統一的開始面試處理函數
+				function handleStartInterview() {
+					if (window.InterviewStageManager.canStart()) {
+						// 開始面試 - 直接觸發完成自介邏輯
+						window.InterviewStageManager.setStage('intro');
+						window.InterviewStageManager.interviewStarted = true;
+						ReadAloud.enabled = true;
+						scanNow(); // 啟用當下，讓頁面上已有但未講過的機器人訊息也念一遍
+						console.log('面試開始：直接進入完成自介階段');
+
+						// 先發送預設自我介紹內容，然後觸發完成邏輯
+						fetch('/api/interview', {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({
+								message: '我是一位有經驗的專業人士，具備相關技能和背景，期待能為貴公司貢獻所長。完成自我介紹',
+								action: 'start_interview'
+							})
+						}).then(response => response.json())
+							.then(data => {
+								console.log('完成自介回應:', data);
+								// 根據後端回應更新階段
+								if (data.stage) {
+									window.InterviewStageManager.setStage(data.stage);
+								}
+								// 顯示回應訊息
+								if (data.reply) {
+									// 創建訊息元素並添加到聊天區域
+									const chatArea = document.getElementById('chat');
+									if (chatArea) {
+										const messageDiv = document.createElement('div');
+										messageDiv.className = 'message assistant';
+										messageDiv.innerHTML = `
+											<div class="role">面試官</div>
+											<div class="bubble">${data.reply.replace(/\n/g, '<br>')}</div>
+											<div class="timestamp">${new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false })}</div>
+										`;
+										chatArea.appendChild(messageDiv);
+										chatArea.scrollTo({
+											top: chatArea.scrollHeight,
+											behavior: 'smooth'
+										});
+									}
+								}
+							}).catch(error => {
+								console.error('完成自介失敗:', error);
+							});
+					}
+				}
+
+				// 綁定開始按鈕（主要按鈕）
+				btnStart?.addEventListener('click', handleStartInterview);
+
+				btnPause?.addEventListener('click', () => {
+					if (window.InterviewStageManager.isInProgress()) {
+						ReadAloud.enabled = false;
+						console.log('面試暫停');
+						// 可以在此加入暫停邏輯，但不改變階段
+					}
+				});
+
+				btnStop?.addEventListener('click', () => {
+					if (window.InterviewStageManager.isInProgress()) {
+						window.InterviewStageManager.setStage('finished');
+						ReadAloud.enabled = false;
+						ReadAloud.q.length = 0; // 清空佇列
+						window.InterviewStageManager.interviewStarted = false;
+						console.log('面試結束');
+
+						// 發送結束面試請求到後端
+						fetch('/api/interview/end', {
+							method: 'POST',
+							headers: { 'Content-Type': 'application/json' },
+							body: JSON.stringify({ action: 'end_interview' })
+						}).then(response => response.json())
+							.then(data => {
+								console.log('面試結束回應:', data);
+							}).catch(error => {
+								console.error('結束面試失敗:', error);
+							});
+					}
+				});
+
+				// 監聽面試階段變化
+				window.addEventListener('interviewStageChange', (event) => {
+					console.log('收到階段變更事件:', event.detail);
+					updateButtonStates();
+
+					// 強制確保按鈕在面試階段時顯示
+					if (event.detail.stage === 'questioning') {
+						setTimeout(() => {
+							const mainActions = document.getElementById('main-actions');
+							const introActions = document.getElementById('intro-actions');
+							if (mainActions) {
+								mainActions.style.display = 'flex';
+								console.log('✅ 面試階段：強制顯示主要按鈕');
+							}
+							if (introActions) {
+								introActions.style.display = 'none';
+								console.log('✅ 面試階段：強制隱藏自介按鈕');
+							}
+						}, 100);
+					}
+				});
+
+				// 檢查是否需要重新開始面試（F5 重新整理時）
+				function checkAndRestartInterview() {
+					// 檢查 localStorage 中是否有面試狀態
+					const interviewState = localStorage.getItem('interview_state');
+					const currentStage = localStorage.getItem('interview_stage');
+
+					if (interviewState === 'running' && currentStage) {
+						console.log('🔄 檢測到面試進行中，執行重新開始邏輯');
+
+						// 清空聊天區域
+						const chatArea = document.getElementById('chat');
+						if (chatArea) {
+							chatArea.innerHTML = '';
+						}
+
+						// 重置計時器
+						if (window.resetTimer) {
+							window.resetTimer();
+						}
+
+						// 重置狀態變數
+						if (window.interviewModePromptShown !== undefined) {
+							window.interviewModePromptShown = false;
+						}
+						if (window.interviewEnded !== undefined) {
+							window.interviewEnded = false;
+						}
+						if (window.userCompletedIntro !== undefined) {
+							window.userCompletedIntro = false;
+						}
+						if (window.interviewStarted !== undefined) {
+							window.interviewStarted = false;
+						}
+
+						// 設定為等待階段
+						window.InterviewStageManager.setStage('waiting');
+
+						// 強制更新按鈕狀態
+						setTimeout(() => {
+							forceUpdateButtonDisplay();
+						}, 100);
+
+						// 顯示歡迎訊息
+						setTimeout(() => {
+							const chatArea = document.getElementById('chat');
+							if (chatArea) {
+								const welcomeDiv = document.createElement('div');
+								welcomeDiv.className = 'message assistant';
+								welcomeDiv.innerHTML = `
+									<div class="role">面試官</div>
+									<div class="bubble">👋 歡迎進入 JobMate360 虛擬面試系統！<br><br>💬 <strong>使用說明：</strong><br>• 點擊「開始面試」開始正式面試流程<br>• 或直接開始自我介紹，我會記錄您的內容<br>• 完成後輸入「完成自介」，我會先分析再出題<br><br>🎯 <strong>面試流程：</strong><br>1️⃣ 自我介紹階段 → 2️⃣ 面試問答階段 → 3️⃣ 面試總結</div>
+									<div class="timestamp">${new Date().toLocaleTimeString('zh-TW', { hour: '2-digit', minute: '2-digit', hour12: false })}</div>
+								`;
+								chatArea.appendChild(welcomeDiv);
+							}
+						}, 500);
+
+						// 清除 localStorage 中的狀態
+						localStorage.removeItem('interview_state');
+						localStorage.removeItem('interview_stage');
+					}
+				}
+
+				// 初始化按鈕狀態
+				updateButtonStates();
+
+				// 確保初始狀態下自介按鈕是隱藏的
+				const introActions = document.getElementById('intro-actions');
+				const mainActions = document.getElementById('main-actions');
+				if (introActions) introActions.style.display = 'none';
+				if (mainActions) mainActions.style.display = 'flex';
+
+				// 強制檢查並修正按鈕顯示狀態
+				function forceUpdateButtonDisplay() {
+					console.log('🔧 強制更新按鈕顯示狀態');
+					const currentStage = window.InterviewStageManager.getStage();
+					console.log('當前階段:', currentStage);
+
+					// 根據當前階段強制設定按鈕顯示
+					if (currentStage === 'waiting') {
+						// 等待階段：只顯示主要按鈕，隱藏自介按鈕
+						if (introActions) {
+							introActions.style.display = 'none';
+							console.log('✅ 等待階段：隱藏自介按鈕');
+						}
+						if (mainActions) {
+							mainActions.style.display = 'flex';
+							console.log('✅ 等待階段：顯示主要按鈕');
+						}
+					} else if (currentStage === 'intro') {
+						// 自介階段：顯示自介按鈕，隱藏主要按鈕
+						if (introActions) {
+							introActions.style.display = 'flex';
+							console.log('✅ 自介階段：顯示自介按鈕');
+						}
+						if (mainActions) {
+							mainActions.style.display = 'none';
+							console.log('✅ 自介階段：隱藏主要按鈕');
+						}
+					} else if (currentStage === 'questioning') {
+						// 面試階段：隱藏自介按鈕，顯示主要按鈕
+						if (introActions) {
+							introActions.style.display = 'none';
+							console.log('✅ 面試階段：隱藏自介按鈕');
+						}
+						if (mainActions) {
+							mainActions.style.display = 'flex';
+							console.log('✅ 面試階段：顯示主要按鈕');
+						}
+					} else if (currentStage === 'finished') {
+						// 結束階段：隱藏自介按鈕，顯示主要按鈕
+						if (introActions) {
+							introActions.style.display = 'none';
+							console.log('✅ 結束階段：隱藏自介按鈕');
+						}
+						if (mainActions) {
+							mainActions.style.display = 'flex';
+							console.log('✅ 結束階段：顯示主要按鈕');
+						}
+					}
+				}
+
+				// 延遲執行強制更新，確保DOM完全載入
+				setTimeout(forceUpdateButtonDisplay, 1000);
+				setTimeout(forceUpdateButtonDisplay, 3000);
+
+				// 頁面載入時檢查是否需要重新開始面試
+				checkAndRestartInterview();
+
+				// 定期檢查面試階段按鈕顯示
+				setInterval(() => {
+					const currentStage = window.InterviewStageManager.getStage();
+					if (currentStage === 'questioning') {
+						const mainActions = document.getElementById('main-actions');
+						const introActions = document.getElementById('intro-actions');
+
+						// 確保面試階段時主要按鈕顯示，自介按鈕隱藏
+						if (mainActions && mainActions.style.display !== 'flex') {
+							mainActions.style.display = 'flex';
+							console.log('🔧 定期檢查：強制顯示面試階段按鈕');
+						}
+						if (introActions && introActions.style.display !== 'none') {
+							introActions.style.display = 'none';
+							console.log('🔧 定期檢查：強制隱藏自介按鈕');
+						}
+					}
+				}, 2000); // 每2秒檢查一次
+
+				// 強制保持按鈕大小穩定的函數
+				function enforceButtonSize() {
+					const completeBtn = document.getElementById('complete-intro');
+					const restartBtn = document.getElementById('restart-intro');
+
+					if (completeBtn) {
+						completeBtn.style.width = '50%';
+						completeBtn.style.minWidth = '120px';
+						completeBtn.style.maxWidth = '200px';
+						completeBtn.style.height = '48px';
+						completeBtn.style.boxSizing = 'border-box';
+					}
+
+					if (restartBtn) {
+						restartBtn.style.width = '50%';
+						restartBtn.style.minWidth = '120px';
+						restartBtn.style.maxWidth = '200px';
+						restartBtn.style.height = '48px';
+						restartBtn.style.boxSizing = 'border-box';
+					}
+				}
+
+				// 定期檢查並強制按鈕大小
+				setInterval(enforceButtonSize, 1000);
+
+				// 測試階段轉換功能（開發用）
+				if (window.location.search.includes('debug=true')) {
+					console.log('🔧 開發模式：啟用階段管理測試');
+					window.testStageTransition = function (stage) {
+						console.log(`測試階段轉換到: ${stage}`);
+						window.InterviewStageManager.setStage(stage);
+					};
+
+					// 在控制台顯示可用的測試命令
+					console.log('可用測試命令:');
+					console.log('- testStageTransition("waiting")');
+					console.log('- testStageTransition("intro")');
+					console.log('- testStageTransition("questioning")');
+					console.log('- testStageTransition("finished")');
+				}
+
+				// 手動強制顯示面試階段按鈕（調試用）
+				window.forceShowInterviewButtons = function () {
+					console.log('🔧 手動強制顯示面試階段按鈕');
+					const mainActions = document.getElementById('main-actions');
+					const introActions = document.getElementById('intro-actions');
+
+					if (mainActions) {
+						mainActions.style.display = 'flex';
+						console.log('✅ 主要按鈕已強制顯示');
+					}
+					if (introActions) {
+						introActions.style.display = 'none';
+						console.log('✅ 自介按鈕已強制隱藏');
+					}
+
+					// 設定為面試階段
+					window.InterviewStageManager.setStage('questioning');
+				};
+
+				// 在控制台提供調試命令
+				console.log('🔧 調試命令:');
+				console.log('- forceShowInterviewButtons() - 強制顯示面試階段按鈕');
+				console.log('- window.InterviewStageManager.getStage() - 查看當前階段');
+			});
+		})();
+	</script>
+
+</body>
+
+</html>

@@ -1,0 +1,301 @@
+## 系統工作流程分析 (整合版)
+[啟動main.py]
+1.使用者會先到登入畫面並且輸入帳號密碼，輸入完後系統會去minio看有沒有註冊過沒有會提醒使用者帳號密碼錯誤
+2.使用者成功登入後會進入上傳履歷跟填寫履歷可以讓使用者作出選擇
+3.依使用者給的履歷去做向量化去幫他從Milvus向量資料庫去做媒合適合他的工作
+
+4.使用者可以透過與LLM對話中，從推薦的職缺中選擇 1 個職缺，按下該職缺title的按鈕，進入契合度分析
+5.得到分析後，使用者可以按頁面按鈕選擇進入：「履歷健檢」、「模擬面試」
+
+6.按下開始模擬面試按鈕進入面試流程，則按下開始履歷健檢按鈕進入履歷健檢
+---
+### **PART 1: 後端資料管道 (Backend Data Pipeline)**
+
+此流程為離線批次處理 (Offline Batch Processing)，核心目標是將原始職缺資料轉換為 AI 可用的向量索引，屬於典型的 ETL（Extract, Transform, Load）過程 。
+
+- **步驟 1: 初始化 (INITIALIZATION)**
+    - **目標**: 建立執行環境，設定所有必要的參數與連線資訊 。
+    - **細節**: 載入 Python 函式庫、讀取 `MILVUS_HOST`、`OPENAI_API_KEY` 等環境變數，並定義 `COLLECTION_NAME`、`CHUNK_SIZE` 等常數 。
+- **步驟 2: 快取檢查 (CACHE_CHECK)**
+    - **目標**: 檢查是否存在已處理的快取檔案 (`embeddings.npy`, `chunks.pkl`)，以節省時間與 API 成本 。
+    - **細節**: 若檔案存在，則直接讀取並跳至步驟 8；若不存在，則繼續完整流程 。
+- **步驟 3: 資料提取 (DATA_EXTRACTION)**
+    - **目標**: 從指定目錄 (`../data/raw/jobs`) 中掃描並載入所有 `.csv` 格式的原始職缺資料檔案 。
+- **步驟 4: 資料轉換 (DATA_TRANSFORMATION)**
+    - **目標**: 清洗、合併並結構化資料，為後續處理做準備 。
+    - **細節**: 使用 Pandas 讀取資料，將文字欄位的 NaN 值填補為空字串，並將多個欄位（職缺名稱、公司名稱、職缺描述等）合併成一個名為 `text_to_embed` 的單一長文本欄位 。
+- **步驟 5: 文本切割 (TEXT_CHUNKING)**
+    - **目標**: 將 `text_to_embed` 長文本切割成符合模型限制且語意完整的短文本區塊 (Chunks) 。
+    - **細節**: 使用 `RecursiveCharacterTextSplitter` 進行切割，並為每個 chunk 建立包含元資料 (metadata) 的物件與唯一的 chunk_id 。
+- **步驟 6: 向量生成 (EMBEDDING_GENERATION)**
+    - **目標**: 將文本區塊透過 OpenAI Embedding API (`text-embedding-3-small` 模型) 轉換為高維度向量 。
+    - **細節**: 系統將多個文本區塊打包成一個批次，發送給 API ，API 則回傳一個包含多個向量的列表 。
+- **步驟 7: 快取持久化 (CACHE_PERSISTENCE)**
+    - **目標**: 將處理完成的文本 (chunks) 與向量 (embeddings) 儲存至本地，供未來快速取用 。
+    - **細節**: Chunks 列表使用 `pickle` 儲存為 `.pkl` 檔案，向量陣列使用 `numpy.save` 儲存為 `.npy` 檔案 。
+- **步驟 8: 向量資料庫設置 (VECTOR_DB_SETUP)**
+    - **目標**: 連線至 Milvus 向量資料庫，並確保目標 Collection 已建立並準備就緒 。
+    - **細節**: 若 Collection 不存在，則根據預定義的結構（Schema）建立新的 Collection，並為 `embedding` 欄位建立 `IVF_FLAT` 索引 。
+- **步驟 9: 資料載入 (DATA_LOADING)**
+    - **目標**: 將處理好的資料與向量分批次載入向量資料庫 。
+    - **細節**: 將 chunks 的元資料和 embeddings 向量整理後，呼叫 `collection.insert()` 將批次資料上傳至 Milvus 。
+- **步驟 10: 完成 (FINALIZATION)**
+    - **目標**: 確認資料寫入並安全地關閉連線 。
+    - **細節**: 依序呼叫 `collection.flush()` 與 `connections.disconnect()` 。
+
+---
+### **PART 2: 前端應用程式 (Frontend Application)**
+此流程為即時互動 (Real-time Interaction)，核心是作為一個總控制器，透過狀態機 (State Machine) 管理對話流程，並在不同階段調度對應的 AI 代理 (Agent) 來完成任務 。
+
+→履歷輸入:
+
+1. 首先，使用者進入應用程式後，會被引導至履歷資料輸入階段，此為所有後續分析與互動的基礎。
+2. 在對話或分析開始前，系統會要求使用者必須填完履歷資料(參考前端範例)， JSON 格式的。
+3. 系統會提供或要求使用者遵循以下的資料結構範例來輸入履歷，其中部分ID欄位（如 `keywords`）可由系統後續自動生成或輔助填寫。
+"""
+{
+"name": "Ada Chang",
+"age": "",
+"location": "新北市",
+"locationOther": "",
+"summary": "I am a PM with experience in both agile and waterfall development. I excel in multi-tasking and prioritizing projects in fast-paced environments. I construct user stories with clear orientation and handle cross-functional team communication to ensure smooth project schedules aligned with business goals. I have supported a company in transforming to a web3.0 gaming company, redesigned product specs, and delivered blockchain games. I have created and managed over 150+ projects, optimized development flows, and communicated across multiple departments.",
+"keywords": "PM, agile, waterfall, project management, web3.0, blockchain, user stories, cross-functional communication",
+"expDomain": "專案",
+"expDomainOther": "",
+"expLocation": [
+"新北市",
+"Singapore"
+],
+"expLocationOther": "",
+"remote": "any",
+"workList": [
+{
+"company": "",
+"title": "Project Manager",
+"start": "",
+"end": "Present",
+"bullets": [
+"Supported company transformation to web3.0 gaming.",
+"Scheduled projects and allocated resources.",
+"Established relationships with key stakeholders.",
+"Communicated development issues to stakeholders.",
+"Managed over 150+ projects for timely delivery."
+]
+}
+],
+"eduList": [
+{
+"school": "National Centural University",
+"degree": "Bachelor",
+"major": "Mandarin",
+"start": "",
+"end": "",
+"bullets": []
+}
+],
+"skillList": [
+"jira",
+"Confluence",
+"Github",
+"Balsamiq",
+"Axure",
+"MS Office",
+"Css",
+"Html"
+],
+"projList": [
+{
+"name": "MIC databank",
+"desc": "A project dedicated to the free sharing of MRI datasets.",
+"tech": [],
+"bullets": []
+},
+{
+"name": "Datavideo CN Website",
+"desc": "Website for a company that designs broadcast technologies.",
+"tech": [],
+"bullets": [
+"Designed innovative technologies for broadcast.",
+"Created 50+ wireframes."
+]
+},
+{
+"name": "Found Hair official website",
+"desc": "An online portfolio for a top hair salon.",
+"tech": [],
+"bullets": [
+"Designed a unique and beautiful website.",
+"Included blog and reservation form systems."
+]
+},
+{
+"name": "eDance e Commerce",
+"desc": "B2C e-commerce website for skincare products.",
+"tech": [],
+"bullets": [
+"Emphasized luxurious design.",
+"Integrated with third-party payment systems."
+]
+},
+{
+"name": "Main Trend Gallery",
+"desc": "Online gallery for art pieces.",
+"tech": [],
+"bullets": [
+"Designed to reveal art prices.",
+"Added new features to existing website."
+]
+}
+],
+"langList": [
+"Mandarin: Native",
+"English: TOEIC 780"
+],
+"certList": [],
+"bioZh": "",
+"bioZh2": ""
+}
+"""
+4. 使用者填寫履歷資料並按下「輸入完成」按鈕後，系統會啟動驗證程序。
+5. 系統會檢查輸入的文字是否轉為有效的 JSON 格式。
+6. 驗證成功後，履歷的 JSON 資料會被儲存mongo及redis，供後續的 Agent 調用。
+7. 履歷儲存完畢後，系統狀態會自動轉換，立即進入「履歷分析與職缺推薦」階段。
+
+→職缺媒合:
+
+1. 首先，使用者進入**等待履歷 (AWAITING_RESUME)** 階段，目標是獲取後續分析所需的基本資料。
+2. 使用者在介面輸入 JSON 格式的履歷資料並提交。
+3. 系統動作：
+    - 啟動驗證程序，確認輸入的資料為有效的 JSON 格式。
+    - 驗證成功後，將履歷資料寫入 PostgreSQL 資料庫進行長期保存。
+    - 同時，將 JSON 資料載入 `st.session_state.resume_data`，供當前對話流程使用。
+4. 完成資料儲存後，系統狀態自動轉換至 **PERFORM_INITIAL_SEARCH**。
+5. 進入**執行首次搜尋 (PERFORM_INITIAL_SEARCH)** 階段，目標是根據履歷自動推薦最相關的職缺並提供初步分析。
+6. 系統動作 (自動執行，無需使用者操作)：
+    - **工具 - ResumeParserTool**: 啟動此工具，從履歷 (`st.session_state.resume_data`) 中提取 `desired_position` 和 `keywords`，組合生成初始查詢字串（例如："資料科學家 Python R SQL"）。
+    - **工具 - MilvusSearchTool**: 啟動此工具，呼叫 Embedding API 將查詢字串轉換為向量，並使用此向量在 Milvus 向量資料庫中進行相似度搜尋，取得 Top-K 個最匹配的職缺。
+    - **代理 - JobScreenerAgent**: 啟動此代理，它會接收使用者履歷與 `MilvusSearchTool` 搜尋到的職缺列表，透過 LLM 生成一份初步的優劣勢分析與職缺匹配摘要。
+7. 系統解析 `JobScreenerAgent` 的回應，將分析文本與職缺索引分離。
+8. 系統在 UI 上顯示分析文本，並將所有推薦的職缺以獨立的「職缺標題」按鈕形式陳列出來。
+9. 完成後，系統狀態自動轉換至 **AWAITING_JOB_SELECTION**。
+10. 進入**等待選擇職缺 (AWAITING_JOB_SELECTION)** 階段，目標是讓使用者根據初步分析，選擇一個感興趣的職缺或提出新的搜尋要求。
+11. 使用者動作有兩種可能路徑：
+    - **路徑 A**: 直接點擊頁面上陳列的任一「職缺標題」按鈕，以深入了解該職缺。
+    - **路徑 B**: 在輸入框中輸入新的文字要求（例如："我想要在台南的工作"），以縮小或更改搜尋範圍。
+12. 系統動作 (依路徑 A):
+    - 系統根據使用者點擊的按鈕，從先前搜尋到的結果中鎖定對應的職缺資料。
+    - **代理 - FitAnalysisAgent**: 啟動此代理，結合使用者履歷與目標職缺資訊，生成一份深入的契合度分析報告，詳細評估技能、經驗的符合度與潛在差距。
+    - 系統在 UI 上顯示這份分析報告，並在告知使用者可以點擊下方提供「履歷健檢」和「模擬面試」兩個選項按鈕，進入下一階段。
+    - 完成後，系統狀態轉換至 **AWAITING_NEXT_STEP_CHOICE**。
+13. 系統動作 (依路徑 B):
+    - **代理 - QueryRewriteAgent**: 啟動此代理，結合舊的查詢條件與使用者輸入的新要求，生成一個更精確的新查詢字串（例如："資料科學家 台南 Python R SQL"）。
+    - 系統使用這個新查詢字串，**返回步驟 6**，重新執行一次完整的搜尋與分析流程。
+    - 系統狀態保持在 **AWAITING_JOB_SELECTION**，等待使用者從新一輪的推薦結果中做選擇。
+14. 進入**等待下一步選擇 (AWAITING_NEXT_STEP_CHOICE)** 階段，目標是根據使用者意願，引導至履歷健檢或模擬面試的子流程。
+15. 使用者點擊「履歷健檢」或「模擬面試」按鈕。
+16. 系統動作：
+    - **代理 - RoutingAgent**: 啟動此代理，判斷使用者點擊的選項。
+    - 若選擇「履歷健檢」：進入履歷健檢頁面，啟動 **ResumeCoachAgent** 進行首次履歷評分與建議，同時狀態轉換至 **IN_RESUME_COACHING**。
+    - 若選擇「模擬面試」：進入模擬面試頁面，開始模擬面試。
+
+→履歷健檢:
+
+1. 首先，當使用者在**等待下一步選擇 (AWAITING_NEXT_STEP_CHOICE)** 階段點擊「履歷健檢」按鈕後，系統便進入此流程。
+2. 系統狀態轉換為
+    
+    **履歷健檢中 (IN_RESUME_COACHING)**，此階段的核心目標是：與使用者進行多輪對話，針對其履歷的特定部分，並結合目標職缺進行深入優化 。
+    
+3. 初始 `ResumeCoachAgent` 已提供第一輪的評分與建議，現在系統會等待使用者的進一步指令。
+4. 使用者有兩種可能的操作路徑：
+    - **路徑 A (追問)**: 在輸入框中提出具體的追問，以尋求更深入的建議（例如："專案描述的部分可以再多給我一些建議嗎?"） 。
+    - **路徑 B (完成)**: 點擊介面上的「完成」按鈕，表示對目前的健檢結果感到滿意，並希望結束此環節 。
+5. 系統動作 (依路徑 A):
+    - **代理 - ResumeCoachAgent (Deep Dive)**: 啟動此代理的深度對話模式 。LLM 會接收包含完整對話歷史和使用者最新問題的請求，回傳更具針對性、引導性的問題或建議 。
+    - 系統狀態保持在**IN_RESUME_COACHING**，以利使用者繼續進行多輪的履歷優化對話 。
+6. 系統動作 (依路徑 B):
+    - 系統在介面上顯示完成履歷健檢的訊息 。
+    - 接著，系統會再次詢問使用者是否希望接下來進行「模擬面試」 。
+    - 系統狀態轉換回
+        
+        **AWAITING_NEXT_STEP_CHOICE**，並再次展示後續選項的按鈕 。
+        
+
+→面試流程:
+1.首先使用者會先按下開始面是按紐，然後開始面試。(如果沒按下鈕則由llm去跟使用者聊天
+2.按下開始面試的按鈕後啟動自我介紹的階段並啟動自我介紹的agent，在自我介紹階段其他agent都不會被啟動直到自我介紹階段結束
+3.自我介紹的Agent會直接叫他做自我介紹而已不會做其他事情
+4.不管使用者說甚麼llm都會認為他是在自我介紹
+5.使用者自我介紹完後會啟動自我介紹分析Agent來做分析
+依"""
+
+1. 開場簡介
+✅ 目標：快速建立初步印象，表明身份與專業定位。
+
+範例：
+
+「您好，我是 Ray，一位有 10 年以上經驗的資料科學與系統架構師，擅長將數據分析與自動化工具應用於企業決策與產品開發中。」
+
+1. 學經歷概述
+✅ 目標：建立專業可信度，聚焦與職缺相關經歷。
+
+範例：
+
+「我畢業於交通大學資訊工程系，之後在 ABC 科技任職資深工程師，主導多項 AI 應用專案，近年則擔任部門主管，負責跨部門產品策略與技術選型。」
+
+1. 核心技能與強項
+✅ 目標：說明你「能做什麼」和「比其他人強在哪裡」。
+
+範例：
+
+「我熟悉 Python、Linux、Docker 等工具，擅長快速搭建資料處理與分析流程，並有豐富的跨部門溝通與團隊管理經驗。」
+
+1. 代表成果
+✅ 目標：具體展示「做過什麼事」以及「產出什麼價值」。
+
+範例：
+
+「在過去一年，我帶領團隊完成自動化履歷分析系統，將分析效率提升 60%，並應用於企業內部招聘流程，協助 HR 團隊快速媒合人才。」
+
+1. 與職缺的連結
+✅ 目標：讓面試官知道你是「為這個職位而來」，不是亂槍打鳥。
+
+範例：
+
+「貴公司在數據平台產品化的發展方向與我過往經驗高度重疊，我特別欣賞你們開放的技術文化，也期待能透過我的背景，協助團隊進行架構升級與效能優化。」
+
+1. 結語與期待
+✅ 目標：留下積極、合作的印象。
+
+範例：
+
+「以上是我的簡單介紹，期待能加入貴團隊，為產品貢獻我的專長，也持續學習與成長。謝謝您的聆聽。」
+"""
+去做參考，來分析使用者的自我介紹內容中有沒有缺失的部分
+6.給出使用者自我介紹的建議
+7.給完建議後，馬上進入面試模式階段
+8.在面試模式階段只會觸發面試的agent(包含給面試問題、分析使用者答案並評判、給出答案)
+在面試過程中要給使用者看到說除非說退出不然會一直下一題的提示
+9.面試完成後會統合前面所有面試過程給出建議
+
+面試對話紀錄（InterviewSession）：每次互動的紀錄與狀態，用於後續查詢與追蹤。先儲存到redis資料庫讓llm有記憶功能，面試結束再全部存入PostgreSQL，全部都要依不同使用者分開儲存
+
++------------------------+
+|    Web Interface      |
++-----------↑------------+
+|
+↓
++------------------------+
+|    HTTP Wrapper       |
++-----------↑------------+
+|
+↓
++------------------------+
+|    MCP Server         |
+|    (FastMCP)          |
++-----------↑------------+
+|
+↓
++------------------------+
+|    FastAgent          |
+|    (LLM Backend)      |
++------------------------+

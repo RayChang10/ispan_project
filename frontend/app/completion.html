@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>JobMate360 | 完成</title>
+	<link rel="stylesheet" href="../assets/css/styles.css" />
+</head>
+<body>
+	<div class="container">
+		<header class="header">
+			<h1>完成</h1>
+		</header>
+
+		<section class="card hero">
+			<h2 id="title">恭喜完成履歷健檢/虛擬面試！</h2>
+			<p class="muted">是否想嘗試下一個職缺？以下為剛剛媒合過的職缺清單：</p>
+			<div id="jobs" class="section"></div>
+			<div class="actions" style="justify-content:center; margin-top:16px;">
+				<button class="button secondary" id="home">回首頁</button>
+			</div>
+		</section>
+	</div>
+	<script>
+		document.addEventListener('DOMContentLoaded', function(){
+			const api = window.JobMate;
+			if(!api.requireAuth(api.rel('completion.html'))) return;
+			api.renderNavbar(document.querySelector('.container'));
+		});
+	</script>
+
+	<script src="../assets/js/common.js"></script>
+	<script src="../assets/js/completion.js"></script>
+</body>
+</html>
+
+

@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>JobMate360 | 履歷填寫/確認</title>
+    <link rel="stylesheet" href="../assets/css/styles.css" />
+</head>
+
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>履歷填寫/確認</h1>
+            <span class="badge">步驟 1 / 3</span>
+        </header>
+
+        <section class="card">
+            <h2>基本資料</h2>
+            <div class="grid">
+                <div>
+                    <label class="label">姓名<span class="badge">必填</span></label>
+                    <input id="name" class="input" type="text" required />
+                </div>
+                <div>
+                    <label class="label">年齡<span class="badge">必填</span></label>
+                    <input id="age" class="input" type="number" min="0" required />
+                </div>
+                <div>
+                    <label class="label">居住地<span class="badge">必填</span></label>
+                    <select id="location" class="input" required>
+                        <option value="">請選擇</option>
+                        <option>台北市</option>
+                        <option>新北市</option>
+                        <option>桃園市</option>
+                        <option>台中市</option>
+                        <option>台南市</option>
+                        <option>高雄市</option>
+                        <option value="other">其他</option>
+                    </select>
+                    <input id="locationOther" class="input hidden" type="text" placeholder="請輸入居住地" />
+                </div>
+                <div class="col">
+                    <label class="label">簡介（上限1000字）<span class="badge">必填</span></label>
+                    <textarea id="summary" maxlength="1000" required></textarea>
+                    <div class="help"><span id="summaryCount">0</span> / 1000</div>
+                </div>
+                <div>
+                    <label class="label">關鍵字</label>
+                    <div class="actions" style="gap:8px;">
+                        <input id="keywordInput" class="input" type="text" placeholder="輸入關鍵字後按Enter或點擊新增" />
+                        <button class="button secondary" id="addKeyword">新增關鍵字</button>
+                    </div>
+                    <div class="help" id="keywordList"
+                        style="display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px;"></div>
+                </div>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2>期望工作資訊</h2>
+            <div class="grid">
+                <div>
+                    <label class="label">期望工作領域<span class="badge">必填</span></label>
+                    <select id="expDomain" class="input" required>
+                        <option value="">請選擇</option>
+                        <option>軟體工程</option>
+                        <option>資料科學</option>
+                        <option>產品/專案</option>
+                        <option value="other">其他</option>
+                    </select>
+                    <input id="expDomainOther" class="input hidden" type="text" placeholder="請輸入領域" />
+                </div>
+                <div>
+                    <label class="label">期望工作地點（可多選）<span class="badge">必填</span></label>
+                    <select id="expLocation" class="input" multiple size="6" required>
+                        <option>台北市</option>
+                        <option>新北市</option>
+                        <option>新竹市</option>
+                        <option>台中市</option>
+                        <option>台南市</option>
+                        <option>高雄市</option>
+                        <option value="other">其他</option>
+                    </select>
+                    <div class="help">按住 Ctrl/Command 可多選</div>
+                    <input id="expLocationOther" class="input hidden" type="text" placeholder="請輸入其他地點（可輸入多個，以頓號分隔）" />
+                </div>
+                <div>
+                    <label class="label">是否遠端<span class="badge">必填</span></label>
+                    <div>
+                        <label><input type="radio" name="remote" value="yes" required> 是</label>
+                        <label style="margin-left:12px;"><input type="radio" name="remote" value="no"> 否</label>
+                        <label style="margin-left:12px;"><input type="radio" name="remote" value="any"> 皆可</label>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <section class="card" id="workSection">
+            <div class="section-header">
+                <h2>工作經歷</h2>
+                <button class="button secondary" id="addWork">新增一筆</button>
+            </div>
+            <div id="workList"></div>
+        </section>
+
+        <section class="card" id="eduSection">
+            <div class="section-header">
+                <h2>教育背景</h2>
+                <button class="button secondary" id="addEdu">新增一筆</button>
+            </div>
+            <div id="eduList"></div>
+        </section>
+
+        <section class="card" id="skillSection">
+            <div class="section-header">
+                <h2>技能</h2>
+                <button class="button secondary" id="addSkill">新增一筆</button>
+            </div>
+            <div id="skillList"></div>
+        </section>
+
+        <section class="card" id="projSection">
+            <div class="section-header">
+                <h2>專案</h2>
+                <button class="button secondary" id="addProj">新增一筆</button>
+            </div>
+            <div id="projList"></div>
+        </section>
+
+        <section class="card" id="langSection">
+            <div class="section-header">
+                <h2>語言</h2>
+                <button class="button secondary" id="addLang">新增一筆</button>
+            </div>
+            <div id="langList"></div>
+        </section>
+
+        <section class="card" id="certSection">
+            <div class="section-header">
+                <h2>證照</h2>
+                <button class="button secondary" id="addCert">新增一筆</button>
+            </div>
+            <div id="certList"></div>
+        </section>
+
+        <section class="card">
+            <h2>自傳</h2>
+            <div class="grid">
+                <div class="col">
+                    <label class="label">中文自傳（上限4000字）</label>
+                    <textarea id="bioZh" maxlength="4000"></textarea>
+                    <div class="help"><span id="bioZhCount">0</span> / 4000</div>
+                </div>
+                <div class="col">
+                    <label class="label">中文自傳（上限8000字）</label>
+                    <textarea id="bioZh2" maxlength="8000"></textarea>
+                    <div class="help"><span id="bioZh2Count">0</span> / 8000</div>
+                </div>
+            </div>
+        </section>
+
+        <div class="actions">
+            <button class="button secondary" id="btnBack">上一步</button>
+            <button class="button danger" id="btnClear">清除</button>
+            <button class="button" id="btnDraft">草稿</button>
+            <button class="button primary" id="btnDone">輸入完成</button>
+        </div>
+    </div>
+    <script src="../assets/js/common.js"></script>
+    <script src="../assets/js/resume.js"></script>
+</body>
+
+</html>

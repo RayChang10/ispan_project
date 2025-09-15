@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>JobMate360 | 履歷選擇</title>
+    <link rel="stylesheet" href="../assets/css/styles.css" />
+</head>
+
+<body>
+    <div class="container">
+        <header class="header">
+            <h1>履歷選擇</h1>
+            <span class="badge">步驟 1 / 3</span>
+        </header>
+
+        <div class="grid" style="grid-template-columns: 1fr 1fr; gap: 2rem; margin-top: 2rem;">
+            <!-- 上傳履歷選項 -->
+            <section class="card choice-card" id="uploadOption">
+                <div class="choice-content">
+                    <div class="choice-icon">📄</div>
+                    <h2>上傳履歷</h2>
+                    <p>如果您已經有現成的履歷檔案，可以直接上傳讓我們為您解析並填入系統。</p>
+                    <div class="choice-features">
+                        <div class="feature-item">✅ 支援 PDF、DOC、DOCX 格式</div>
+                        <div class="feature-item">✅ 自動解析履歷內容</div>
+                        <div class="feature-item">✅ 快速完成履歷建立</div>
+                    </div>
+                    <button class="button primary choice-btn" id="uploadResumeBtn">
+                        選擇檔案上傳
+                    </button>
+                </div>
+            </section>
+
+            <!-- 填寫履歷選項 -->
+            <section class="card choice-card" id="fillOption">
+                <div class="choice-content">
+                    <div class="choice-icon">✏️</div>
+                    <h2>手動填寫履歷</h2>
+                    <p>如果您想要重新建立履歷，可以透過我們的表單逐步填寫各項資訊。</p>
+                    <div class="choice-features">
+                        <div class="feature-item">✅ 結構化表單設計</div>
+                        <div class="feature-item">✅ 即時驗證與提示</div>
+                        <div class="feature-item">✅ 可儲存草稿</div>
+                    </div>
+                    <button class="button primary choice-btn" id="fillResumeBtn">
+                        開始填寫履歷
+                    </button>
+                </div>
+            </section>
+        </div>
+
+        <!-- 檔案上傳區域（預設隱藏） -->
+        <section class="card" id="uploadSection" style="display: none; margin-top: 2rem;">
+            <h2>上傳履歷檔案</h2>
+            <div class="upload-area">
+                <div class="file-drop-zone" id="fileDropZone">
+                    <div class="upload-icon">📁</div>
+                    <p>拖拽檔案到此處，或點擊選擇檔案</p>
+                    <p class="file-types">支援格式：PDF、DOC、DOCX</p>
+                    <input type="file" id="resumeFileInput" accept=".pdf,.doc,.docx" style="display: none;" />
+                </div>
+                <div class="file-info" id="fileInfo" style="display: none;">
+                    <div class="selected-file">
+                        <span class="file-name" id="fileName"></span>
+                        <button class="button danger small" id="removeFileBtn">移除</button>
+                    </div>
+                </div>
+            </div>
+            <div class="actions">
+                <button class="button secondary" id="backToChoiceBtn">返回選擇</button>
+                <button class="button primary" id="processFileBtn" disabled>處理檔案</button>
+            </div>
+        </section>
+    </div>
+
+    <script src="../assets/js/common.js"></script>
+    <script src="../assets/js/resume-choice.js"></script>
+</body>
+
+</html>

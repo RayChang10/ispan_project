@@ -1,0 +1,765 @@
+# FastMCP-FastAgent 職缺搜尋技術實現指南
+
+## 📋 概述
+
+本文件提供將 commitLLM 的 RAG 職缺搜尋功能整合到 FastMCP-FastAgent 系統的詳細技術實現指南。
+
+## 🏗️ 系統架構
+
+### 整合架構圖
+```
+用戶介面 (Frontend)
+    ↓
+FastAPI 後端 (fastapi_app.py)
+    ↓
+統一工作流程管理器 (unified_workflow.py)
+    ↓
+Fast Agent 橋接器 (fast_agent_bridge.py)
+    ↓
+MCP 工具層
+├── 職缺搜尋工具 (job_search_tool.py)
+├── 履歷分析工具 (resume_analysis_tool.py)
+└── 現有面試工具
+    ↓
+資料層
+├── Milvus 向量資料庫
+├── PostgreSQL 關聯式資料庫
+├── Redis 快取
+└── MinIO 物件儲存
+```
+
+## 🔧 核心組件實現
+
+### 1. 職缺搜尋工具 (job_search_tool.py)
+
+#### 主要功能
+- 向量化查詢文字
+- 在 Milvus 中搜尋相似職缺
+- 根據履歷內容搜尋職缺
+
+#### 關鍵實現
+```python
+class JobSearchTool:
+    def __init__(self):
+        self.milvus_host = os.getenv("MILVUS_HOST", "localhost")
+        self.milvus_port = os.getenv("MILVUS_PORT", "19530")
+        self.collection_name = "job_postings_openai"
+        self.openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        self.embedding_model = "text-embedding-3-small"
+    
+    def search_jobs(self, query: str, top_k: int = 10) -> List[Dict[str, Any]]:
+        # 1. 連接到 Milvus
+        collection = self.get_collection()
+        if not collection:
+            return []
+        
+        # 2. 向量化查詢
+        query_vector = self.embed_query(query)
+        if not query_vector:
+            return []
+        
+        # 3. 搜尋
+        search_params = {"metric_type": "COSINE", "params": {"nprobe": 10}}
+        results = collection.search(
+            data=[query_vector],
+            anns_field="embedding",
+            param=search_params,
+            limit=top_k,
+            output_fields=["original_text", "job_title", "company_name", "job_url", "location"]
+        )
+        
+        # 4. 格式化結果
+        return self._format_search_results(results[0])
+```
+
+### 2. 履歷分析工具 (resume_analysis_tool.py)
+
+#### 主要功能
+- 分析履歷與職缺契合度
+- 提供履歷健檢服務
+- 生成改進建議
+
+#### 關鍵實現
+```python
+class ResumeAnalysisTool:
+    def analyze_resume_for_job(self, resume_data: Dict[str, Any], job_data: Dict[str, Any]) -> Dict[str, Any]:
+        # 1. 構建分析提示詞
+        prompt = self._build_fit_analysis_prompt(resume_data, job_data)
+        
+        # 2. 調用 OpenAI
+        response = self.openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "你是一位專業的職涯顧問，擅長分析履歷與職缺的契合度。"},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.3,
+            max_tokens=1500
+        )
+        
+        # 3. 返回分析結果
+        return {
+            "status": "success",
+            "analysis": response.choices[0].message.content,
+            "resume_data": resume_data,
+            "job_data": job_data
+        }
+```
+
+### 3. 統一工作流程管理器 (unified_workflow.py)
+
+#### 主要功能
+- 管理工作流程狀態
+- 控制階段轉換
+- 提供統一的 API 介面
+
+#### 關鍵實現
+```python
+class UnifiedWorkflowManager:
+    def __init__(self):
+        self.current_stage = WorkflowStage.LOGIN
+        self.user_data = {}
+        self.resume_data = {}
+        self.selected_job = {}
+        self.search_results = []
+        self.interview_data = {}
+    
+    def can_proceed_to_job_search(self) -> bool:
+        return bool(self.resume_data)
+    
+    def can_proceed_to_fit_analysis(self) -> bool:
+        return bool(self.resume_data and self.selected_job)
+    
+    def get_next_available_stages(self) -> List[str]:
+        available_stages = []
+        
+        if self.can_proceed_to_job_search():
+            available_stages.append("job_search")
+        
+        if self.can_proceed_to_fit_analysis():
+            available_stages.append("fit_analysis")
+        
+        if self.can_proceed_to_resume_health_check():
+            available_stages.append("resume_health_check")
+        
+        if self.can_proceed_to_mock_interview():
+            available_stages.append("mock_interview")
+        
+        return available_stages
+```
+
+## 🔌 API 端點實現
+
+### 1. 職缺搜尋 API
+
+#### 搜尋職缺
+```python
+@app.post("/api/job_search/search")
+async def api_search_jobs(request: JobSearchRequest):
+    """搜尋職缺 API"""
+    try:
+        result = call_fast_agent_function(
+            "search_jobs", 
+            user_query=request.query, 
+            top_k=request.top_k
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+```
+
+#### 根據履歷搜尋
+```python
+@app.post("/api/job_search/search_by_resume")
+async def api_search_jobs_by_resume(request: ResumeJobSearchRequest):
+    """根據履歷搜尋職缺 API"""
+    try:
+        result = call_fast_agent_function(
+            "search_jobs_by_resume",
+            resume_data=request.resume_data,
+            query=request.query
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+```
+
+### 2. 工作流程 API
+
+#### 設定履歷
+```python
+@app.post("/api/workflow/set_resume")
+async def api_set_resume(request: ResumeRequest):
+    """設定履歷資料"""
+    try:
+        result = process_workflow_request(
+            "set_resume",
+            resume_data=request.resume_data
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+```
+
+#### 職缺搜尋
+```python
+@app.post("/api/workflow/search_jobs")
+async def api_workflow_search_jobs(request: JobSearchRequest):
+    """工作流程職缺搜尋"""
+    try:
+        result = process_workflow_request(
+            "search_jobs",
+            query=request.query
+        )
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+```
+
+## 🔄 工作流程實現
+
+### 1. 狀態管理
+
+#### 工作流程階段
+```python
+class WorkflowStage(Enum):
+    LOGIN = "login"
+    RESUME_INPUT = "resume_input"
+    JOB_SEARCH = "job_search"
+    JOB_SELECTION = "job_selection"
+    FIT_ANALYSIS = "fit_analysis"
+    RESUME_HEALTH_CHECK = "resume_health_check"
+    MOCK_INTERVIEW = "mock_interview"
+    COMPLETION = "completion"
+```
+
+#### 狀態轉換邏輯
+```python
+def process_workflow_request(request_type: str, **kwargs) -> Dict[str, Any]:
+    manager = get_workflow_manager()
+    
+    if request_type == "set_resume":
+        # 設定履歷資料
+        resume_data = kwargs.get("resume_data", {})
+        manager.set_resume_data(resume_data)
+        manager.set_stage(WorkflowStage.RESUME_INPUT)
+        
+        return {
+            "status": "success",
+            "message": "履歷資料已設定",
+            "next_stages": manager.get_next_available_stages(),
+            "current_stage": manager.get_stage()
+        }
+    
+    elif request_type == "search_jobs":
+        # 職缺搜尋
+        if not manager.can_proceed_to_job_search():
+            return {
+                "status": "error",
+                "message": "請先提供履歷資料"
+            }
+        
+        query = kwargs.get("query", "")
+        result = call_fast_agent_function(
+            "search_jobs_by_resume",
+            resume_data=manager.resume_data,
+            query=query
+        )
+        
+        if result.get("status") == "success":
+            manager.set_search_results(result.get("jobs", []))
+            manager.set_stage(WorkflowStage.JOB_SEARCH)
+        
+        return result
+```
+
+### 2. 錯誤處理
+
+#### 統一錯誤處理
+```python
+def handle_workflow_error(error: Exception, context: str) -> Dict[str, Any]:
+    """統一錯誤處理"""
+    logger.error(f"❌ {context} 失敗: {str(error)}")
+    
+    return {
+        "status": "error",
+        "message": f"{context} 失敗: {str(error)}",
+        "error_type": type(error).__name__,
+        "context": context
+    }
+```
+
+#### API 錯誤處理
+```python
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """全域異常處理器"""
+    return JSONResponse(
+        status_code=500,
+        content={
+            "status": "error",
+            "message": f"系統錯誤: {str(exc)}",
+            "error_type": type(exc).__name__
+        }
+    )
+```
+
+## 🧪 測試實現
+
+### 1. 單元測試
+
+#### 職缺搜尋工具測試
+```python
+def test_job_search_tool():
+    """測試職缺搜尋工具"""
+    tool = JobSearchTool()
+    
+    # 測試連線
+    assert tool.connect_milvus() == True
+    
+    # 測試搜尋
+    results = tool.search_jobs("Python 開發工程師", top_k=5)
+    assert len(results) <= 5
+    assert all("job_title" in job for job in results)
+```
+
+#### 履歷分析工具測試
+```python
+def test_resume_analysis_tool():
+    """測試履歷分析工具"""
+    tool = ResumeAnalysisTool()
+    
+    resume_data = {
+        "name": "測試用戶",
+        "skills": ["Python", "JavaScript"],
+        "experience": "3年開發經驗"
+    }
+    
+    job_data = {
+        "job_title": "Python 開發工程師",
+        "requirements": "Python, JavaScript"
+    }
+    
+    result = tool.analyze_resume_for_job(resume_data, job_data)
+    assert result["status"] == "success"
+    assert "analysis" in result
+```
+
+### 2. 整合測試
+
+#### 工作流程測試
+```python
+def test_workflow_integration():
+    """測試工作流程整合"""
+    # 1. 設定履歷
+    result = process_workflow_request("set_resume", resume_data=test_resume)
+    assert result["status"] == "success"
+    
+    # 2. 搜尋職缺
+    result = process_workflow_request("search_jobs", query="Python")
+    assert result["status"] == "success"
+    assert "jobs" in result
+    
+    # 3. 選擇職缺
+    result = process_workflow_request("select_job", job_index=0)
+    assert result["status"] == "success"
+    
+    # 4. 分析契合度
+    result = process_workflow_request("analyze_fit")
+    assert result["status"] == "success"
+```
+
+## 📊 效能優化
+
+### 1. 搜尋優化
+
+#### 向量索引優化
+```python
+def optimize_milvus_index():
+    """優化 Milvus 索引"""
+    collection = get_collection()
+    
+    # 建立 IVF_FLAT 索引
+    index_params = {
+        "metric_type": "COSINE",
+        "index_type": "IVF_FLAT",
+        "params": {"nlist": 128}
+    }
+    
+    collection.create_index(
+        field_name="embedding",
+        index_params=index_params
+    )
+```
+
+#### 快取機制
+```python
+def cache_search_results(query: str, results: List[Dict[str, Any]]):
+    """快取搜尋結果"""
+    cache_key = f"job_search:{hash(query)}"
+    redis_client.setex(
+        cache_key,
+        300,  # 5分鐘過期
+        json.dumps(results)
+    )
+
+def get_cached_results(query: str) -> Optional[List[Dict[str, Any]]]:
+    """獲取快取的搜尋結果"""
+    cache_key = f"job_search:{hash(query)}"
+    cached = redis_client.get(cache_key)
+    
+    if cached:
+        return json.loads(cached)
+    return None
+```
+
+### 2. 記憶體優化
+
+#### 分頁載入
+```python
+def search_jobs_paginated(query: str, page: int = 1, page_size: int = 10):
+    """分頁搜尋職缺"""
+    offset = (page - 1) * page_size
+    
+    results = search_jobs(query, top_k=page_size)
+    
+    return {
+        "jobs": results,
+        "page": page,
+        "page_size": page_size,
+        "has_more": len(results) == page_size
+    }
+```
+
+## 🔒 安全性實現
+
+### 1. 輸入驗證
+
+#### 履歷資料驗證
+```python
+def validate_resume_data(resume_data: Dict[str, Any]) -> bool:
+    """驗證履歷資料"""
+    required_fields = ["name", "skills", "experience"]
+    
+    for field in required_fields:
+        if field not in resume_data:
+            return False
+    
+    # 檢查資料類型
+    if not isinstance(resume_data["name"], str):
+        return False
+    
+    if not isinstance(resume_data["skills"], list):
+        return False
+    
+    return True
+```
+
+#### API 輸入驗證
+```python
+class JobSearchRequest(BaseModel):
+    query: str = Field(..., min_length=1, max_length=500)
+    top_k: int = Field(default=10, ge=1, le=50)
+
+class ResumeJobSearchRequest(BaseModel):
+    resume_data: Dict[str, Any]
+    query: str = Field(default="", max_length=500)
+```
+
+### 2. 速率限制
+
+#### API 速率限制
+```python
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+@app.post("/api/job_search/search")
+@limiter.limit("10/minute")
+async def api_search_jobs(request: JobSearchRequest):
+    # API 實現
+    pass
+```
+
+## 📈 監控和日誌
+
+### 1. 日誌記錄
+
+#### 結構化日誌
+```python
+import structlog
+
+logger = structlog.get_logger()
+
+def log_job_search(query: str, results_count: int, duration: float):
+    """記錄職缺搜尋日誌"""
+    logger.info(
+        "job_search_completed",
+        query=query,
+        results_count=results_count,
+        duration=duration,
+        user_id=get_current_user_id()
+    )
+```
+
+#### 錯誤日誌
+```python
+def log_workflow_error(error: Exception, stage: str, user_id: str):
+    """記錄工作流程錯誤"""
+    logger.error(
+        "workflow_error",
+        error_type=type(error).__name__,
+        error_message=str(error),
+        stage=stage,
+        user_id=user_id,
+        stack_trace=traceback.format_exc()
+    )
+```
+
+### 2. 效能監控
+
+#### 響應時間監控
+```python
+import time
+from functools import wraps
+
+def monitor_performance(func_name: str):
+    """效能監控裝飾器"""
+    def decorator(func):
+        @wraps(func)
+        def wrapper(*args, **kwargs):
+            start_time = time.time()
+            
+            try:
+                result = func(*args, **kwargs)
+                duration = time.time() - start_time
+                
+                logger.info(
+                    "function_performance",
+                    function_name=func_name,
+                    duration=duration,
+                    status="success"
+                )
+                
+                return result
+            except Exception as e:
+                duration = time.time() - start_time
+                
+                logger.error(
+                    "function_performance",
+                    function_name=func_name,
+                    duration=duration,
+                    status="error",
+                    error=str(e)
+                )
+                
+                raise
+        
+        return wrapper
+    return decorator
+```
+
+## 🚀 部署配置
+
+### 1. Docker 配置
+
+#### Dockerfile 更新
+```dockerfile
+# 安裝額外依賴
+RUN pip install pymilvus openai langchain pyyaml
+
+# 複製職缺搜尋相關檔案
+COPY backend/tools/job_search_tool.py /app/backend/tools/
+COPY backend/tools/resume_analysis_tool.py /app/backend/tools/
+COPY backend/unified_workflow.py /app/backend/
+```
+
+#### docker-compose.yml 更新
+```yaml
+services:
+  milvus:
+    image: milvusdb/milvus:v2.3.0
+    container_name: fastmcp-milvus
+    environment:
+      ETCD_ENDPOINTS: etcd:2379
+      MINIO_ADDRESS: minio:9000
+    ports:
+      - "19530:19530"
+    depends_on:
+      - etcd
+      - minio
+```
+
+### 2. 環境變數配置
+
+#### .env 檔案
+```env
+# Milvus 配置
+MILVUS_HOST=localhost
+MILVUS_PORT=19530
+
+# OpenAI 配置
+OPENAI_API_KEY=your_openai_api_key_here
+
+# 職缺搜尋配置
+JOB_SEARCH_COLLECTION=job_postings_openai
+JOB_SEARCH_TOP_K=10
+```
+
+## 📚 使用範例
+
+### 1. 基本使用
+
+#### 職缺搜尋
+```python
+from backend.fast_agent_bridge import call_fast_agent_function
+
+# 搜尋職缺
+result = call_fast_agent_function(
+    "search_jobs",
+    user_query="Python 開發工程師",
+    top_k=10
+)
+
+if result["status"] == "success":
+    jobs = result["jobs"]
+    for job in jobs:
+        print(f"職缺: {job['job_title']}")
+        print(f"公司: {job['company_name']}")
+        print(f"相似度: {job['similarity_score']:.2f}")
+```
+
+#### 履歷分析
+```python
+# 分析履歷與職缺契合度
+result = call_fast_agent_function(
+    "analyze_job_fit",
+    resume_data=resume_data,
+    job_data=job_data
+)
+
+if result["status"] == "success":
+    print("契合度分析:")
+    print(result["analysis"])
+```
+
+### 2. 工作流程使用
+
+#### 完整工作流程
+```python
+from backend.unified_workflow import process_workflow_request
+
+# 1. 設定履歷
+result = process_workflow_request("set_resume", resume_data=resume_data)
+
+# 2. 搜尋職缺
+result = process_workflow_request("search_jobs", query="Python")
+
+# 3. 選擇職缺
+result = process_workflow_request("select_job", job_index=0)
+
+# 4. 分析契合度
+result = process_workflow_request("analyze_fit")
+
+# 5. 履歷健檢
+result = process_workflow_request("resume_health_check")
+
+# 6. 開始模擬面試
+result = process_workflow_request("start_mock_interview")
+```
+
+## 🔧 故障排除
+
+### 1. 常見問題
+
+#### Milvus 連線問題
+```python
+def troubleshoot_milvus_connection():
+    """故障排除 Milvus 連線"""
+    try:
+        # 檢查 Milvus 服務狀態
+        import requests
+        response = requests.get("http://localhost:9091/healthz")
+        
+        if response.status_code == 200:
+            print("✅ Milvus 服務正常")
+        else:
+            print("❌ Milvus 服務異常")
+            
+    except Exception as e:
+        print(f"❌ Milvus 連線失敗: {e}")
+        print("請檢查:")
+        print("1. Milvus 容器是否運行")
+        print("2. 端口 19530 是否開放")
+        print("3. 網路連線是否正常")
+```
+
+#### OpenAI API 問題
+```python
+def troubleshoot_openai_api():
+    """故障排除 OpenAI API"""
+    try:
+        client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+        response = client.models.list()
+        print("✅ OpenAI API 連線正常")
+        
+    except Exception as e:
+        print(f"❌ OpenAI API 連線失敗: {e}")
+        print("請檢查:")
+        print("1. OPENAI_API_KEY 是否設定")
+        print("2. API Key 是否有效")
+        print("3. 網路連線是否正常")
+```
+
+### 2. 效能調優
+
+#### 搜尋效能調優
+```python
+def optimize_search_performance():
+    """搜尋效能調優"""
+    # 1. 調整搜尋參數
+    search_params = {
+        "metric_type": "COSINE",
+        "params": {
+            "nprobe": 16,  # 增加搜尋精度
+            "ef": 64       # 增加搜尋效率
+        }
+    }
+    
+    # 2. 使用快取
+    cache_key = f"search_cache:{hash(query)}"
+    cached_result = redis_client.get(cache_key)
+    
+    if cached_result:
+        return json.loads(cached_result)
+    
+    # 3. 執行搜尋
+    result = perform_search(query, search_params)
+    
+    # 4. 快取結果
+    redis_client.setex(cache_key, 300, json.dumps(result))
+    
+    return result
+```
+
+## 📝 總結
+
+本技術實現指南提供了將 commitLLM 的 RAG 職缺搜尋功能整合到 FastMCP-FastAgent 系統的完整技術實現方案。通過模組化設計、統一的 API 介面和工作流程管理，我們可以實現一個高效、可擴展的職缺媒合系統。
+
+關鍵技術要點：
+1. **模組化設計**: 將職缺搜尋功能封裝為獨立的 MCP 工具
+2. **統一介面**: 通過 Fast Agent 橋接器提供統一的 API
+3. **工作流程管理**: 實現完整的狀態管理和流程控制
+4. **效能優化**: 使用向量索引、快取機制和分頁載入
+5. **安全性**: 實作輸入驗證、速率限制和錯誤處理
+6. **監控**: 提供完整的日誌記錄和效能監控
+
+---
+
+**文件版本**: 1.0
+**最後更新**: 2024年12月
+**技術負責人**: 開發團隊

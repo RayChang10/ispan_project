@@ -1,0 +1,39 @@
+# FastAgent MCP 專用容器
+# 解決 protobuf 版本衝突問題
+FROM python:3.12-slim
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_NO_CACHE_DIR=1
+
+WORKDIR /app
+
+# 系統相依套件
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    build-essential \
+    gcc \
+    g++ \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# 安裝 uv
+RUN curl -LsSf https://astral.sh/uv/install.sh | sh
+ENV PATH="/root/.local/bin:${PATH}"
+
+# 先安裝 protobuf 5.x 版本，符合 fast-agent-mcp 要求
+RUN uv pip install --system "protobuf>=5.0.0,<6.0.0"
+
+# 安裝 FastAgent MCP 專用依賴
+COPY requirements-fastagent.txt ./
+RUN uv pip install --system -r requirements-fastagent.txt
+
+# 複製專案程式碼
+COPY . .
+
+EXPOSE 8002
+
+# 啟動 FastAgent MCP 服務
+CMD ["bash", "-lc", "uv run python -m backend.fast_agent_interview"]

@@ -1,0 +1,274 @@
+# FastMCP-FastAgent API 對口修正步驟流程
+
+## �� 修正目標
+
+確保前後端 API 串接一致性，統一使用舊版 `/api/job_search/*` API，並修正面試 API 對口問題。
+
+## 🔍 問題分析
+
+### 1. API 不一致問題
+- `api.js` 同時定義新舊兩套 API（JobSearchAPI 和 WorkflowAPI）
+- 實際使用中混用了不同版本的 API
+- 面試 API 使用自定義端點解析，可能連接到錯誤的服務
+
+### 2. 面試 API 端點混亂問題
+- `interview.js` 使用多個候選端點嘗試連接
+- 端點解析邏輯複雜且可能連接到錯誤服務
+- 與其他 API 調用方式不一致
+
+### 3. RAG 功能確認
+- 後端確實使用 RAG（Milvus + OpenAI Embedding）
+- 前端透過 `JobMateAPI.JobSearch.*` 調用，間接使用 RAG
+- 需要確認所有搜尋功能都正確使用 RAG
+
+## ��️ 修正步驟
+
+### 步驟 1：清理 API 定義
+**檔案**：`frontend/assets/js/api.js`
+
+**修改內容**：
+1. 移除 `WorkflowAPI` 定義（第83-133行）
+2. 保留 `JobSearchAPI`（舊版 API）
+3. 修正 `window.JobMateAPI` 導出
+
+**修改前**：
+```javascript
+// 工作流程 API
+const WorkflowAPI = {
+    // 設定履歷
+    async setResume(resumeData) {
+        return await apiCall('/workflow/set_resume', {
+            method: 'POST',
+            body: JSON.stringify({ resume_data: resumeData })
+        });
+    },
+    // ... 其他 Workflow API
+};
+
+// 導出 API 模組
+window.JobMateAPI = {
+    JobSearch: JobSearchAPI,
+    Workflow: WorkflowAPI,  // 移除這行
+    Interview: InterviewAPI,
+    Auth: AuthAPI,
+    apiCall,
+    resolveApiBase
+};
+```
+
+**修改後**：
+```javascript
+// 導出 API 模組
+window.JobMateAPI = {
+    JobSearch: JobSearchAPI,
+    Interview: InterviewAPI,
+    Auth: AuthAPI,
+    apiCall,
+    resolveApiBase
+};
+```
+
+### 步驟 2：修正面試 API 對口
+**檔案**：`frontend/assets/js/interview.js`
+
+**修改內容**：
+1. 移除自定義 API 解析邏輯
+2. 使用統一的 API 調用方式
+3. 確保連接到正確的後端服務
+
+**修改前**：
+```javascript
+// ---- 與後端面試 API 串接 ----
+let INTERVIEW_API = '';
+async function resolveInterviewApi() {
+    if (INTERVIEW_API) return INTERVIEW_API;
+    const candidates = [
+        '/api/interview',
+        'http://localhost:5000/api/interview',
+        'http://localhost:8001/api/interview',
+        'http://localhost:8080/api/interview'
+    ];
+    // ... 複雜的端點解析邏輯
+}
+
+async function callInterview(message) {
+    const endpoint = await resolveInterviewApi();
+    const userId = localStorage.getItem('jobmate_user_id') || 'default_user';
+    const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message, user_id: userId })
+    });
+    // ... 複雜的響應處理
+}
+```
+
+**修改後**：
+```javascript
+// 使用統一的 API 調用
+async function callInterview(message) {
+    try {
+        const userId = localStorage.getItem('jobmate_user_id') || 'default_user';
+        const result = await window.JobMateAPI.Interview.sendMessage(message, userId);
+        
+        // 處理響應格式
+        if (result && result.data && result.data.response) {
+            return result.data.response;
+        } else if (result && result.response) {
+            return result.response;
+        } else if (typeof result === 'string') {
+            return result;
+        } else {
+            return '系統忙碌中，請稍後再試。';
+        }
+    } catch (error) {
+        console.error('面試 API 調用失敗:', error);
+        return '呼叫面試服務失敗，請稍後再試。';
+    }
+}
+```
+
+### 步驟 3：確認面試 API 功能完整性
+**檔案**：`frontend/assets/js/interview.js`
+
+**檢查內容**：
+1. 確認面試 API 支援所有功能：
+   - 自我介紹收集 (`intro` 階段)
+   - 自我介紹分析 (`analyze_intro`)
+   - 問題生成 (`get_question`)
+   - 答案分析 (`analyze_answer`)
+   - 狀態管理 (`intro` → `questioning` → `finished`)
+   - 會話記憶 (Redis + PostgreSQL)
+   - 重置功能
+
+**確認點**：
+```javascript
+// 面試 API 內部功能完整，包括：
+// 1. 狀態機轉換
+// 2. 自我介紹收集
+// 3. 問題生成
+// 4. 答案分析
+// 5. 會話記憶
+const result = await window.JobMateAPI.Interview.sendMessage(message, userId);
+```
+
+### 步驟 4：確認 RAG 功能使用
+**檔案**：`frontend/assets/js/matching.js`
+
+**檢查內容**：
+1. 確認所有搜尋都使用 `JobMateAPI.JobSearch.*`
+2. 驗證後端 RAG 功能正常運作
+
+**確認點**：
+```javascript
+// 這些調用都會透過後端使用 RAG
+result = await window.JobMateAPI.JobSearch.searchJobsByResume(resumeData, query);
+result = await window.JobMateAPI.JobSearch.searchJobs(query, 10);
+const fitResult = await window.JobMateAPI.JobSearch.analyzeFit(resumeData, job);
+```
+
+### 步驟 5：統一履歷健檢 API
+**檔案**：`frontend/assets/js/review.js`
+
+**確認內容**：
+1. 確認使用 `JobMateAPI.JobSearch.resumeHealthCheck`
+2. 移除任何 Workflow API 的使用
+
+**確認點**：
+```javascript
+const result = await window.JobMateAPI.JobSearch.resumeHealthCheck(currentData, selectedJob);
+```
+
+## �� 測試步驟
+
+### 測試 1：職缺搜尋功能
+1. 開啟 `matching.html`
+2. 輸入搜尋條件（如："台北 後端 Go"）
+3. 確認返回職缺列表
+4. 檢查瀏覽器開發者工具中的 API 調用
+
+### 測試 2：履歷健檢功能
+1. 開啟 `resume-review.html`
+2. 填寫履歷資料
+3. 點擊健檢按鈕
+4. 確認 API 調用使用正確端點
+
+### 測試 3：面試功能完整性測試
+1. 開啟 `interview.html`
+2. **自我介紹階段測試**：
+   - 發送自我介紹內容
+   - 確認系統收集並引導
+   - 輸入「開始面試」進入下一階段
+3. **問題生成測試**：
+   - 確認系統生成面試問題
+   - 測試「下一題」功能
+4. **答案分析測試**：
+   - 回答問題
+   - 確認系統分析答案
+5. **狀態管理測試**：
+   - 測試「重新開始」功能
+   - 確認狀態正確重置
+6. 檢查瀏覽器開發者工具中的 API 調用
+
+### 測試 4：API 一致性檢查
+1. 檢查瀏覽器開發者工具
+2. 確認所有 API 調用都使用正確端點：
+   - 職缺搜尋：`/api/job_search/*`
+   - 面試：`/api/interview`
+   - 認證：`/api/auth/*`
+3. 確認沒有使用 `/api/workflow/*` 端點
+
+### 測試 5：CORS 檢查
+1. 確認沒有 CORS 錯誤
+2. 檢查所有 API 調用都成功
+3. 確認響應格式正確
+
+## ✅ 預期結果
+
+### 修正後的效果
+1. **API 一致性**：所有功能都使用統一的 API 調用方式
+2. **面試功能完整**：保持所有複雜功能（狀態機、會話記憶等）
+3. **RAG 功能**：職缺搜尋正確使用 Milvus + OpenAI Embedding
+4. **錯誤處理**：統一的錯誤處理機制
+5. **端點統一**：消除端點混亂問題
+
+### 性能改善
+1. **啟動速度**：移除不必要的 API 定義
+2. **維護性**：統一的 API 架構
+3. **穩定性**：減少 API 對口錯誤
+4. **調試性**：簡化的 API 調用邏輯
+
+## ⚠️ 注意事項
+
+1. **備份**：修改前請備份相關檔案
+2. **測試**：每個步驟完成後都要進行測試
+3. **回滾**：如果出現問題，可以快速回滾到修改前狀態
+4. **文檔**：修改完成後更新相關文檔
+5. **面試功能**：確保面試的複雜功能（狀態機、會話記憶）不受影響
+
+## �� 完成檢查清單
+
+- [ ] 移除 `api.js` 中的 `WorkflowAPI`
+- [ ] 修正 `interview.js` 的 API 調用方式
+- [ ] 確認面試 API 功能完整性（狀態機、會話記憶等）
+- [ ] 確認 `matching.js` 使用正確的 RAG API
+- [ ] 確認 `review.js` 使用正確的健檢 API
+- [ ] 測試所有功能正常運作
+- [ ] 檢查瀏覽器開發者工具中的 API 調用
+- [ ] 確認沒有 CORS 錯誤
+- [ ] 更新相關文檔
+
+## 🔄 後續優化建議
+
+1. **API 版本管理**：考慮引入 API 版本控制
+2. **錯誤處理**：統一錯誤處理機制
+3. **日誌記錄**：增加 API 調用日誌
+4. **性能監控**：監控 API 響應時間
+5. **快取機制**：考慮增加前端快取
+6. **面試功能增強**：考慮增加面試進度條、計時器等 UI 元素
+
+---
+**文件版本**：v1.1
+**創建日期**：2024-12-19
+**最後更新**：2024-12-19
+**負責人**：開發團隊

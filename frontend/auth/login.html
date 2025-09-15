@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="zh-Hant-TW">
+
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width, initial-scale=1" />
+	<title>登入 | JobMate360</title>
+	<link rel="stylesheet" href="../assets/css/styles.css" />
+</head>
+
+<body>
+	<div class="container" id="root">
+		<!-- 導覽列由 JS 注入 -->
+		<div class="center-screen">
+			<section class="card" style="max-width:640px; width:100%;">
+				<h2>登入</h2>
+				<div class="grid">
+					<div class="col">
+						<label class="label">帳號（8–64 字）<span class="badge">必填</span></label>
+						<input id="email" class="input" type="text" maxlength="64" />
+					</div>
+					<div class="col">
+						<label class="label">密碼（8–64 字，含大小寫與數字）<span class="badge">必填</span></label>
+						<input id="password" class="input" type="password" maxlength="64" />
+					</div>
+				</div>
+				<div style="margin-top:8px;">
+					<label><input id="remember" type="checkbox" /> 記住我</label>
+				</div>
+				<div class="actions">
+					<button class="button primary" id="loginBtn">登入</button>
+					<a class="button secondary" href="register.html">前往註冊</a>
+				</div>
+				<div class="help" id="error"></div>
+			</section>
+		</div>
+	</div>
+	<script src="../assets/js/common.js"></script>
+	<script src="../assets/js/auth-login.js"></script>
+</body>
+
+</html>

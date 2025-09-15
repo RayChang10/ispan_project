@@ -1,0 +1,329 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WebRTC 測試</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+        }
+
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+        }
+
+        video {
+            width: 100%;
+            max-width: 640px;
+            border: 1px solid #ccc;
+        }
+
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+
+        .info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>WebRTC 連接測試</h1>
+
+    <div id="status" class="status info">準備連接...</div>
+
+    <button id="startBtn">開始連接</button>
+    <button id="stopBtn" style="display:none">停止連接</button>
+
+    <div>
+        <h3>視頻流</h3>
+        <video id="video" autoplay playsinline></video>
+        <audio id="audio" autoplay></audio>
+    </div>
+
+    <div>
+        <h3>連接狀態</h3>
+        <div id="connectionState">未連接</div>
+        <div id="iceConnectionState">ICE: 未連接</div>
+        <div id="signalingState">信令: 穩定</div>
+    </div>
+
+    <script>
+        let pc = null;
+        const statusDiv = document.getElementById('status');
+        const startBtn = document.getElementById('startBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const video = document.getElementById('video');
+        const audio = document.getElementById('audio');
+
+        function updateStatus(message, type = 'info') {
+            statusDiv.textContent = message;
+            statusDiv.className = `status ${type}`;
+            console.log(message);
+        }
+
+        function updateConnectionInfo() {
+            if (pc) {
+                document.getElementById('connectionState').textContent = `連接狀態: ${pc.connectionState}`;
+                document.getElementById('iceConnectionState').textContent = `ICE: ${pc.iceConnectionState}`;
+                document.getElementById('signalingState').textContent = `信令: ${pc.signalingState}`;
+            }
+        }
+
+        async function start() {
+            try {
+                // 檢查 WebRTC 支援
+                if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                    throw new Error('瀏覽器不支援 getUserMedia API');
+                }
+
+                if (!window.RTCPeerConnection) {
+                    throw new Error('瀏覽器不支援 RTCPeerConnection');
+                }
+
+                // 檢查 WebRTC 功能
+                console.log('WebRTC 支援檢查:');
+                console.log('- getUserMedia:', !!navigator.mediaDevices?.getUserMedia);
+                console.log('- RTCPeerConnection:', !!window.RTCPeerConnection);
+                console.log('- 瀏覽器:', navigator.userAgent);
+
+                updateStatus('WebRTC 支援檢查通過，正在創建連接...', 'info');
+
+                // 先嘗試獲取媒體權限（這可能會觸發 ICE 收集）
+                updateStatus('正在獲取媒體權限...', 'info');
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({
+                        audio: true,
+                        video: false
+                    });
+                    updateStatus('媒體權限獲取成功', 'success');
+
+                    // 創建 RTCPeerConnection
+                    pc = new RTCPeerConnection({
+                        iceServers: [] // 空數組，只使用本地候選者
+                    });
+                    updateStatus('使用本地 ICE 候選者模式', 'info');
+
+                } catch (mediaError) {
+                    console.log('媒體權限獲取失敗，嘗試直接創建連接:', mediaError);
+
+                    // 如果媒體權限失敗，直接創建連接
+                    pc = new RTCPeerConnection({
+                        iceServers: [] // 空數組，只使用本地候選者
+                    });
+                    updateStatus('直接創建連接模式', 'info');
+                }
+
+                // 監聽連接狀態變化
+                pc.addEventListener('connectionstatechange', updateConnectionInfo);
+                pc.addEventListener('iceconnectionstatechange', updateConnectionInfo);
+                pc.addEventListener('signalingstatechange', updateConnectionInfo);
+                pc.addEventListener('icegatheringstatechange', () => {
+                    console.log('ICE 收集狀態變化:', pc.iceGatheringState);
+                    updateConnectionInfo();
+                });
+
+                // 監聽連接狀態變化
+                pc.addEventListener('connectionstatechange', (event) => {
+                    console.log('連接狀態變化:', pc.connectionState);
+                    updateConnectionInfo();
+                });
+
+                pc.addEventListener('iceconnectionstatechange', (event) => {
+                    console.log('ICE 連接狀態變化:', pc.iceConnectionState);
+                    updateConnectionInfo();
+                });
+
+                pc.addEventListener('signalingstatechange', (event) => {
+                    console.log('信令狀態變化:', pc.signalingState);
+                    updateConnectionInfo();
+                });
+
+                // 監聽 ICE 候選者
+                let candidateCount = 0;
+                pc.addEventListener('icecandidate', (event) => {
+                    candidateCount++;
+                    console.log(`ICE 候選者 #${candidateCount}:`, event.candidate);
+                    if (event.candidate) {
+                        updateStatus(`收到 ICE 候選者 #${candidateCount}: ${event.candidate.type}`, 'info');
+                    } else {
+                        console.log('ICE 候選者收集完成');
+                        updateStatus('ICE 候選者收集完成', 'success');
+                    }
+                });
+
+                // 監聽媒體軌道
+                pc.addEventListener('track', (event) => {
+                    console.log('收到媒體軌道:', event.track.kind);
+                    if (event.track.kind === 'video') {
+                        video.srcObject = event.streams[0];
+                    } else if (event.track.kind === 'audio') {
+                        audio.srcObject = event.streams[0];
+                    }
+                });
+
+                // 創建 offer
+                updateStatus('正在創建 offer...', 'info');
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+
+                // 檢查 SDP 內容
+                console.log('初始 SDP:', pc.localDescription.sdp);
+                console.log('包含 ice-ufrag:', pc.localDescription.sdp.includes('a=ice-ufrag:'));
+                console.log('包含 ice-pwd:', pc.localDescription.sdp.includes('a=ice-pwd:'));
+
+                // 如果 SDP 已經包含 ICE 憑證，直接繼續
+                if (pc.localDescription.sdp.includes('a=ice-ufrag:') && pc.localDescription.sdp.includes('a=ice-pwd:')) {
+                    updateStatus('SDP 已包含 ICE 憑證，跳過等待', 'success');
+                } else {
+                    // 等待 ICE 收集（更靈活的等待）
+                    updateStatus('等待 ICE 收集...', 'info');
+                    await new Promise((resolve, reject) => {
+                        const maxWaitTime = 5000; // 5秒
+                        const checkInterval = 200; // 每200ms檢查一次
+                        let elapsed = 0;
+                        let hasLocalCandidates = false;
+
+                        const checkICE = () => {
+                            elapsed += checkInterval;
+                            console.log(`ICE 狀態: ${pc.iceGatheringState}, 已等待: ${elapsed}ms`);
+
+                            // 檢查是否有本地候選者
+                            if (candidateCount > 0) {
+                                hasLocalCandidates = true;
+                            }
+
+                            if (pc.iceGatheringState === 'complete') {
+                                console.log('ICE 收集完成');
+                                resolve();
+                            } else if (elapsed >= maxWaitTime) {
+                                if (hasLocalCandidates) {
+                                    console.log('ICE 收集超時，但有本地候選者，繼續進行');
+                                    resolve();
+                                } else {
+                                    console.log('ICE 收集超時，嘗試使用初始 SDP');
+                                    resolve(); // 超時後仍然繼續
+                                }
+                            } else {
+                                setTimeout(checkICE, checkInterval);
+                            }
+                        };
+
+                        checkICE();
+                    });
+                    
+                    // 如果 ICE 收集失敗，嘗試強制添加 ICE 憑證
+                    if (!pc.localDescription.sdp.includes('a=ice-ufrag:') || !pc.localDescription.sdp.includes('a=ice-pwd:')) {
+                        updateStatus('嘗試強制添加 ICE 憑證...', 'info');
+                        let modifiedSdp = pc.localDescription.sdp;
+                        
+                        // 檢查是否缺少 ICE 憑證
+                        if (!modifiedSdp.includes('a=ice-ufrag:')) {
+                            modifiedSdp += '\r\na=ice-ufrag:test123';
+                            console.log('添加 ice-ufrag');
+                        }
+                        if (!modifiedSdp.includes('a=ice-pwd:')) {
+                            modifiedSdp += '\r\na=ice-pwd:test456';
+                            console.log('添加 ice-pwd');
+                        }
+                        
+                        // 更新 SDP
+                        await pc.setLocalDescription({
+                            type: pc.localDescription.type,
+                            sdp: modifiedSdp
+                        });
+                        
+                        console.log('修改後的 SDP:', pc.localDescription.sdp);
+                        updateStatus('ICE 憑證已強制添加', 'success');
+                    }
+                }
+
+                // 檢查 SDP 內容
+                console.log('最終 SDP:', pc.localDescription.sdp);
+                console.log('包含 ice-ufrag:', pc.localDescription.sdp.includes('a=ice-ufrag:'));
+                console.log('包含 ice-pwd:', pc.localDescription.sdp.includes('a=ice-pwd:'));
+
+                // 確保 SDP 包含 ICE 憑證
+                if (!pc.localDescription.sdp.includes('a=ice-ufrag:') || !pc.localDescription.sdp.includes('a=ice-pwd:')) {
+                    throw new Error('SDP 缺少 ICE 憑證資訊');
+                }
+
+                // 調試：顯示 SDP 內容
+                console.log('SDP 內容:', pc.localDescription.sdp);
+                updateStatus('SDP 創建成功，包含 ICE 憑證', 'success');
+
+                // 發送到 livetalking 服務
+                updateStatus('正在發送 offer 到 livetalking 服務...', 'info');
+                const response = await fetch('http://localhost:8010/offer', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        sdp: pc.localDescription.sdp,
+                        type: pc.localDescription.type
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const answer = await response.json();
+                updateStatus('收到 answer，正在設置遠端描述...', 'info');
+
+                // 設置遠端描述
+                await pc.setRemoteDescription(answer);
+                updateStatus('WebRTC 連接建立成功！', 'success');
+
+                startBtn.style.display = 'none';
+                stopBtn.style.display = 'inline';
+
+            } catch (error) {
+                updateStatus(`連接失敗: ${error.message}`, 'error');
+                console.error('WebRTC 錯誤:', error);
+            }
+        }
+
+        function stop() {
+            if (pc) {
+                pc.close();
+                pc = null;
+                video.srcObject = null;
+                audio.srcObject = null;
+                updateStatus('連接已關閉', 'info');
+                startBtn.style.display = 'inline';
+                stopBtn.style.display = 'none';
+                document.getElementById('connectionState').textContent = '未連接';
+                document.getElementById('iceConnectionState').textContent = 'ICE: 未連接';
+                document.getElementById('signalingState').textContent = '信令: 穩定';
+            }
+        }
+
+        startBtn.addEventListener('click', start);
+        stopBtn.addEventListener('click', stop);
+
+        // 定期更新連接狀態
+        setInterval(updateConnectionInfo, 1000);
+    </script>
+</body>
+
+</html>
